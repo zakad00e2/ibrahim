@@ -1,0 +1,244 @@
+import { useMemo, useState, type FormEvent } from "react";
+import { PackagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { Button } from "../components/Button";
+import { Modal } from "../components/Modal";
+import { StatusBadge } from "../components/StatusBadge";
+import { useAppStore } from "../store/AppStore";
+import type { Product } from "../types";
+import { getStockStatus } from "../utils/calculations";
+import { formatCurrency } from "../utils/formatCurrency";
+
+type ProductForm = {
+  name: string;
+  barcode: string;
+  price: string;
+  stock: string;
+};
+
+const emptyForm: ProductForm = {
+  name: "",
+  barcode: "",
+  price: "",
+  stock: "0",
+};
+
+export function ProductsPage() {
+  const { products, addProduct, updateProduct, deleteProduct } = useAppStore();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const totalProducts = products.length;
+  const lowStockCount = useMemo(
+    () => products.filter((product) => product.stock > 0 && product.stock < 5).length,
+    [products],
+  );
+
+  const openAddModal = () => {
+    setEditingProduct(null);
+    setForm(emptyForm);
+    setMessage(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (product: Product) => {
+    setEditingProduct(product);
+    setForm({
+      name: product.name,
+      barcode: product.barcode,
+      price: String(product.price),
+      stock: String(product.stock),
+    });
+    setMessage(null);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingProduct(null);
+    setForm(emptyForm);
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const input = {
+      name: form.name,
+      barcode: form.barcode,
+      price: Number(form.price),
+      stock: Number(form.stock || 0),
+    };
+
+    const result = editingProduct
+      ? updateProduct(editingProduct.id, input)
+      : addProduct(input);
+
+    setMessage({ type: result.ok ? "success" : "error", text: result.message });
+
+    if (result.ok) {
+      closeModal();
+      setMessage({ type: "success", text: result.message });
+    }
+  };
+
+  const handleDelete = (product: Product) => {
+    const confirmed = window.confirm(`هل تريد حذف المنتج "${product.name}"؟`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteProduct(product.id);
+    setMessage({ type: "success", text: "تم حذف المنتج بنجاح" });
+  };
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-bold text-zinc-500">عدد المنتجات</p>
+          <p className="mt-1 text-3xl font-extrabold text-zinc-950">{totalProducts}</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-bold text-zinc-500">منتجات قليلة الكمية</p>
+          <p className="mt-1 text-3xl font-extrabold text-amber-700">{lowStockCount}</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-bold text-zinc-500">إدارة محلية</p>
+          <p className="mt-1 text-base font-extrabold text-brand-700">React State</p>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-extrabold text-zinc-950">قائمة المنتجات</h3>
+            <p className="text-sm font-semibold text-zinc-500">كل العمليات هنا مؤقتة داخل الواجهة فقط</p>
+          </div>
+          <Button icon={<Plus className="h-5 w-5" />} onClick={openAddModal}>
+            إضافة منتج
+          </Button>
+        </div>
+
+        {message ? (
+          <div
+            className={[
+              "mx-4 mt-4 rounded-lg px-3 py-2 text-sm font-bold",
+              message.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
+            ].join(" ")}
+          >
+            {message.text}
+          </div>
+        ) : null}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-right text-sm">
+            <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
+              <tr>
+                <th className="px-4 py-3">الاسم</th>
+                <th className="px-4 py-3">الباركود</th>
+                <th className="px-4 py-3">السعر</th>
+                <th className="px-4 py-3">الكمية المتوفرة</th>
+                <th className="px-4 py-3">الحالة</th>
+                <th className="px-4 py-3">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {products.map((product) => {
+                const status = getStockStatus(product.stock);
+
+                return (
+                  <tr key={product.id}>
+                    <td className="px-4 py-3 font-extrabold text-zinc-950">{product.name}</td>
+                    <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
+                    <td className="px-4 py-3 font-bold">{formatCurrency(product.price)}</td>
+                    <td className="px-4 py-3 font-bold">{product.stock}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge tone={status.tone} size="sm">{status.label}</StatusBadge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => openEditModal(product)}>
+                          تعديل
+                        </Button>
+                        <Button variant="ghost" size="icon" aria-label="حذف المنتج" onClick={() => handleDelete(product)}>
+                          <Trash2 className="h-5 w-5 text-red-600" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <Modal
+        open={modalOpen}
+        title={editingProduct ? "تعديل منتج" : "إضافة منتج"}
+        onClose={closeModal}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={closeModal}>
+              إلغاء
+            </Button>
+            <Button type="submit" form="product-form" icon={<PackagePlus className="h-5 w-5" />}>
+              {editingProduct ? "حفظ التعديل" : "إضافة المنتج"}
+            </Button>
+          </div>
+        }
+      >
+        <form id="product-form" className="grid gap-4" onSubmit={handleSubmit}>
+          <label className="block">
+            <span className="mb-2 block text-sm font-extrabold text-zinc-900">اسم المنتج</span>
+            <input
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-extrabold text-zinc-900">الباركود</span>
+            <input
+              value={form.barcode}
+              onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            />
+          </label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-extrabold text-zinc-900">السعر</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.price}
+                onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-extrabold text-zinc-900">الكمية</span>
+              <input
+                type="number"
+                min="0"
+                value={form.stock}
+                onChange={(event) => setForm((current) => ({ ...current, stock: event.target.value }))}
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+          </div>
+
+          {message?.type === "error" ? (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{message.text}</div>
+          ) : null}
+        </form>
+      </Modal>
+    </div>
+  );
+}

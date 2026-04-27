@@ -1,0 +1,40 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: "Cairo", "Tajawal", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f7f8f6;
+  color: #18181b;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input[type="number"] {
+  direction: ltr;
+  text-align: right;
+}
+
+::selection {
+  background: #d5f8ed;
+  color: #0f332b;
+}
