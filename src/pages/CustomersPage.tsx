@@ -204,7 +204,7 @@ export function CustomersPage() {
 
                 return (
                   <tr key={customer.id}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(customer.name)}</td>
+                    <td className="font-features-normal px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(customer.name)}</td>
                     <td className="px-4 py-3 font-semibold text-zinc-600">{customer.phone || "غير مسجل"}</td>
                     <td className={debt > 0 ? "px-4 py-3 font-extrabold text-red-700" : "px-4 py-3 font-bold text-emerald-700"}>
                       {formatCurrency(debt)}
@@ -296,7 +296,7 @@ export function CustomersPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">الاسم</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{toArabicDigits(selectedCustomer.name)}</p>
+                <p className="font-features-normal mt-1 font-extrabold text-zinc-950">{toArabicDigits(selectedCustomer.name)}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">رقم الهاتف</p>

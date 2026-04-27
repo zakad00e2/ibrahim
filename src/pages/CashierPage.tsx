@@ -299,7 +299,7 @@ export function CashierPage() {
           ) : null}
         </div>
 
-        <div className="order-3 rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="font-features-normal order-3 rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-lg font-medium text-zinc-950">المنتجات</h3>
@@ -356,11 +356,11 @@ export function CashierPage() {
             <table className="w-full min-w-[680px] text-right text-sm sm:min-w-[760px]">
               <thead className="bg-zinc-50 text-xs font-normal text-zinc-500">
                 <tr>
-                  <th className="px-4 py-3">اسم المنتج</th>
-                  <th className="px-4 py-3">السعر</th>
-                  <th className="px-4 py-3">الكمية</th>
-                  <th className="px-4 py-3">الإجمالي</th>
-                  <th className="px-4 py-3">إجراءات</th>
+                  <th className="px-4 py-3 font-normal">اسم المنتج</th>
+                  <th className="px-4 py-3 font-normal">السعر</th>
+                  <th className="px-4 py-3 font-normal">الكمية</th>
+                  <th className="px-4 py-3 font-normal">الإجمالي</th>
+                  <th className="px-4 py-3 font-normal">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -435,7 +435,7 @@ export function CashierPage() {
         </dl>
 
         <div className="mt-6">
-          <label className="mb-2 block text-sm font-medium text-zinc-900">طريقة الدفع</label>
+          <label className="font-features-styled mb-2 block text-sm font-medium text-zinc-900">طريقة الدفع</label>
           <div className="grid grid-cols-3 gap-2">
             {paymentOptions.map((option) => (
               <button
@@ -443,7 +443,7 @@ export function CashierPage() {
                 type="button"
                 onClick={() => resetPaymentFields(option.value)}
                 className={[
-                  "rounded-lg border px-2 py-2 text-xs font-normal transition sm:px-3 sm:text-sm",
+                  "font-features-normal rounded-lg border px-2 py-2 text-xs font-normal transition sm:px-3 sm:text-sm",
                   paymentMethod === option.value
                     ? "border-brand-600 bg-brand-50 text-brand-700"
                     : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
@@ -458,10 +458,11 @@ export function CashierPage() {
         {paymentMethod === "debt" || paymentMethod === "partial" ? (
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-sm font-extrabold text-zinc-900">اختيار العميل</span>
+              <span className="font-features-styled text-sm font-medium text-zinc-900">اختيار العميل</span>
               <Button
                 variant="ghost"
                 size="sm"
+                className="!font-normal"
                 icon={<UserPlus className="h-4 w-4" />}
                 onClick={openCustomerModal}
               >
@@ -478,13 +479,13 @@ export function CashierPage() {
                   setSelectedCustomerId("");
                 }}
                 placeholder="ابحث باسم العميل أو رقم الهاتف"
-                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
             </label>
 
             <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-zinc-200 bg-white">
               {filteredCustomers.length === 0 ? (
-                <div className="p-3 text-sm font-semibold text-zinc-500">لا يوجد عملاء مطابقون</div>
+                <div className="p-3 text-sm font-normal text-zinc-500">لا يوجد عملاء مطابقون</div>
               ) : (
                 filteredCustomers.map((customer) => (
                   <button
@@ -496,8 +497,8 @@ export function CashierPage() {
                       selectedCustomerId === customer.id ? "bg-brand-50 text-brand-700" : "text-zinc-800",
                     ].join(" ")}
                   >
-                    <span className="font-extrabold">{toArabicDigits(customer.name)}</span>
-                    <span className="text-xs font-semibold text-zinc-500">{customer.phone || "بدون هاتف"}</span>
+                    <span className="font-features-normal font-normal">{toArabicDigits(customer.name)}</span>
+                    <span className="text-xs font-normal text-zinc-500">{customer.phone || "بدون هاتف"}</span>
                   </button>
                 ))
               )}
@@ -505,7 +506,7 @@ export function CashierPage() {
 
             {selectedCustomer ? (
               <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
-                العميل المختار: {toArabicDigits(selectedCustomer.name)}
+                العميل المختار: <span className="font-features-normal">{toArabicDigits(selectedCustomer.name)}</span>
               </p>
             ) : null}
           </div>
@@ -554,24 +555,24 @@ export function CashierPage() {
       >
         <form id="cashier-customer-form" className="grid gap-4" onSubmit={handleAddCustomer}>
           <label className="block">
-            <span className="mb-2 block text-sm font-extrabold text-zinc-900">اسم العميل</span>
+            <span className="mb-2 block text-sm font-normal text-zinc-900">اسم العميل</span>
             <input
               value={toArabicDigits(customerForm.name)}
               onChange={(event) =>
                 setCustomerForm((current) => ({ ...current, name: normalizeDigits(event.target.value) }))
               }
-              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
 
           <label className="block">
-            <span className="mb-2 block text-sm font-extrabold text-zinc-900">رقم الهاتف</span>
+            <span className="mb-2 block text-sm font-normal text-zinc-900">رقم الهاتف</span>
             <input
               value={customerForm.phone}
               onChange={(event) =>
                 setCustomerForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))
               }
-              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
 

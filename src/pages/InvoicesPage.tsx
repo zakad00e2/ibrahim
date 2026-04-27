@@ -67,7 +67,7 @@ export function InvoicesPage() {
                 <tr key={invoice.id}>
                   <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(invoice.date)}</td>
-                  <td className="px-4 py-3 font-bold">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
+                  <td className="font-features-normal px-4 py-3 font-bold">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
                   <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(invoice.total)}</td>
                   <td className="px-4 py-3 font-bold text-emerald-700">{formatCurrency(invoice.paid)}</td>
                   <td className="px-4 py-3 font-bold text-red-700">{formatCurrency(invoice.remaining)}</td>
@@ -106,7 +106,7 @@ export function InvoicesPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">العميل</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}</p>
+                <p className="font-features-normal mt-1 font-extrabold text-zinc-950">{selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">طريقة الدفع</p>

@@ -58,12 +58,14 @@ h3,
 .font-bold,
 .font-extrabold {
   font-family: "Thmanyah Sans", "Tajawal", "Cairo", system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
 }
 
 .sidebar-brand {
   display: inline-block;
   font-family: "Thmanyah Serif Display", "Thmanyah Sans", serif;
   font-weight: 700;
+  font-feature-settings: "ss01", "cv11";
 }
 
 button,
@@ -72,6 +74,19 @@ select,
 textarea {
   font: inherit;
   line-height: 1.5;
+}
+
+button {
+  font-feature-settings: "ss01", "cv11";
+}
+
+.font-features-styled {
+  font-feature-settings: "ss01", "cv11";
+}
+
+.font-features-normal,
+.font-features-normal * {
+  font-feature-settings: normal;
 }
 
 input[type="number"] {
