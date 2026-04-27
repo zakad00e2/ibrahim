@@ -137,7 +137,7 @@ export function InvoicesPage() {
                 <tbody className="divide-y divide-zinc-100">
                   {selectedInvoice.items.map((item) => (
                     <tr key={`${selectedInvoice.id}-${item.productId}`}>
-                      <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(item.productName)}</td>
+                      <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
                       <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
                       <td className="px-4 py-3 font-bold">{formatNumber(item.quantity)}</td>
                       <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(item.total)}</td>

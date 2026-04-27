@@ -263,23 +263,29 @@ export function CashierPage() {
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="flex flex-col gap-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <label className="mb-2 block text-sm font-extrabold text-zinc-900" htmlFor="barcode">
+          <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
             امسح الباركود هنا
           </label>
-          <input
-            ref={barcodeInputRef}
-            id="barcode"
-            value={barcode}
-            onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
-            onKeyDown={handleBarcodeEnter}
-            placeholder="اكتب أو امسح الباركود ثم اضغط Enter"
-            className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100 sm:h-14 sm:px-4 sm:text-xl"
-          />
+          <div className="relative">
+            <input
+              ref={barcodeInputRef}
+              id="barcode"
+              value={barcode}
+              onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
+              onKeyDown={handleBarcodeEnter}
+              className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-zinc-500 focus:bg-white sm:h-14 sm:px-4 sm:text-xl"
+            />
+            {barcode ? null : (
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base font-normal leading-none text-zinc-400 sm:right-4 sm:text-xl">
+                اكتب أو امسح الباركود
+              </span>
+            )}
+          </div>
 
           {notice ? (
             <div
               className={[
-                "mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold",
+                "mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-normal",
                 notice.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
               ].join(" ")}
             >
@@ -296,8 +302,8 @@ export function CashierPage() {
         <div className="order-3 rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h3 className="text-lg font-extrabold text-zinc-950">المنتجات</h3>
-              <p className="text-sm font-semibold text-zinc-500">اضغط على المنتج لإضافته بسرعة</p>
+              <h3 className="text-lg font-medium text-zinc-950">المنتجات</h3>
+              <p className="text-sm font-light text-zinc-500">اضغط على المنتج لإضافته بسرعة</p>
             </div>
             <label className="relative block lg:w-80">
               <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
@@ -324,15 +330,15 @@ export function CashierPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-extrabold text-zinc-950">{toArabicDigits(product.name)}</p>
+                      <p className="font-medium text-zinc-950">{toArabicDigits(product.name)}</p>
                     </div>
-                    <StatusBadge tone={status.tone} size="sm">{status.label}</StatusBadge>
+                    <StatusBadge className="!font-normal" tone={status.tone} size="sm">{status.label}</StatusBadge>
                   </div>
                   <div className="mt-auto pt-3">
                     <p className="mb-2 text-xs font-semibold text-zinc-500">{product.barcode}</p>
                     <div className="flex items-end justify-between gap-3 text-sm font-bold">
                       <span className="text-brand-700">{formatCurrency(product.price)}</span>
-                      <span className="text-zinc-500">المخزون: {formatNumber(product.stock)}</span>
+                      <span className="font-normal text-zinc-500">المخزون: {formatNumber(product.stock)}</span>
                     </div>
                   </div>
                 </button>
@@ -344,11 +350,11 @@ export function CashierPage() {
         <div className="order-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-zinc-100 p-4">
             <ReceiptText className="h-5 w-5 text-brand-600" />
-            <h3 className="text-lg font-extrabold text-zinc-950">الفاتورة الحالية</h3>
+            <h3 className="text-lg font-medium text-zinc-950">الفاتورة الحالية</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-right text-sm sm:min-w-[760px]">
-              <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
+              <thead className="bg-zinc-50 text-xs font-normal text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">اسم المنتج</th>
                   <th className="px-4 py-3">السعر</th>
@@ -360,15 +366,15 @@ export function CashierPage() {
               <tbody className="divide-y divide-zinc-100">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center font-semibold text-zinc-500">
+                    <td colSpan={5} className="px-4 py-10 text-center font-normal text-zinc-500">
                       لم تتم إضافة منتجات بعد
                     </td>
                   </tr>
                 ) : (
                   items.map((item) => (
                     <tr key={item.productId}>
-                      <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(item.productName)}</td>
-                      <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
+                      <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
+                      <td className="px-4 py-3 font-normal">{formatCurrency(item.price)}</td>
                       <td className="px-4 py-3">
                         <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
                           <Button
@@ -379,7 +385,7 @@ export function CashierPage() {
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
-                          <span className="w-8 text-center font-extrabold">{formatNumber(item.quantity)}</span>
+                          <span className="w-8 text-center font-normal">{formatNumber(item.quantity)}</span>
                           <Button
                             size="icon"
                             variant="secondary"
@@ -390,7 +396,7 @@ export function CashierPage() {
                           </Button>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(item.total)}</td>
+                      <td className="px-4 py-3 font-normal text-brand-700">{formatCurrency(item.total)}</td>
                       <td className="px-4 py-3">
                         <Button
                           size="icon"
@@ -411,25 +417,25 @@ export function CashierPage() {
       </section>
 
       <aside className="h-fit rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-5">
-        <h3 className="text-xl font-extrabold text-zinc-950">ملخص الفاتورة</h3>
+        <h3 className="text-xl font-medium text-zinc-950">ملخص الفاتورة</h3>
 
         <dl className="mt-5 space-y-3">
           <div className="flex items-center justify-between">
-            <dt className="font-bold text-zinc-500">المجموع الكلي</dt>
-            <dd className="text-xl font-extrabold text-zinc-950 sm:text-2xl">{formatCurrency(total)}</dd>
+            <dt className="font-normal text-zinc-500">المجموع الكلي</dt>
+            <dd className="text-xl font-normal text-zinc-950 sm:text-2xl">{formatCurrency(total)}</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt className="font-bold text-zinc-500">المبلغ المدفوع</dt>
-            <dd className="font-extrabold text-emerald-700">{formatCurrency(effectivePaid || 0)}</dd>
+            <dt className="font-normal text-zinc-500">المبلغ المدفوع</dt>
+            <dd className="font-normal text-emerald-700">{formatCurrency(effectivePaid || 0)}</dd>
           </div>
           <div className="flex items-center justify-between">
-            <dt className="font-bold text-zinc-500">المتبقي</dt>
-            <dd className="font-extrabold text-red-700">{formatCurrency(remaining)}</dd>
+            <dt className="font-normal text-zinc-500">المتبقـــــــــــــي</dt>
+            <dd className="font-normal text-red-700">{formatCurrency(remaining)}</dd>
           </div>
         </dl>
 
         <div className="mt-6">
-          <label className="mb-2 block text-sm font-extrabold text-zinc-900">طريقة الدفع</label>
+          <label className="mb-2 block text-sm font-medium text-zinc-900">طريقة الدفع</label>
           <div className="grid grid-cols-3 gap-2">
             {paymentOptions.map((option) => (
               <button
@@ -437,7 +443,7 @@ export function CashierPage() {
                 type="button"
                 onClick={() => resetPaymentFields(option.value)}
                 className={[
-                  "rounded-lg border px-2 py-2 text-xs font-extrabold transition sm:px-3 sm:text-sm",
+                  "rounded-lg border px-2 py-2 text-xs font-normal transition sm:px-3 sm:text-sm",
                   paymentMethod === option.value
                     ? "border-brand-600 bg-brand-50 text-brand-700"
                     : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
@@ -522,12 +528,12 @@ export function CashierPage() {
 
         <Button
           fullWidth
-          className="mt-6"
+          className="mt-6 !font-normal"
           size="md"
-          icon={<CheckCircle2 className="h-5 w-5" />}
           onClick={handleCompleteSale}
         >
           إتمام البيع
+          <CheckCircle2 className="h-5 w-5" />
         </Button>
       </aside>
 

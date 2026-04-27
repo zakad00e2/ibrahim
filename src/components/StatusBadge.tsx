@@ -1,6 +1,7 @@
 type StatusBadgeProps = {
   tone?: "success" | "warning" | "danger" | "neutral" | "info";
   size?: "sm" | "md";
+  className?: string;
   children: string;
 };
 
@@ -17,9 +18,9 @@ const sizeClasses = {
   md: "px-2.5 py-1 text-xs",
 };
 
-export function StatusBadge({ tone = "neutral", size = "md", children }: StatusBadgeProps) {
+export function StatusBadge({ tone = "neutral", size = "md", className = "", children }: StatusBadgeProps) {
   return (
-    <span className={`inline-flex items-center justify-center rounded-full text-center font-bold leading-none ring-1 ${sizeClasses[size]} ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center justify-center rounded-full text-center font-bold leading-none ring-1 ${sizeClasses[size]} ${toneClasses[tone]} ${className}`}>
       {children}
     </span>
   );

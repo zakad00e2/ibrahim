@@ -86,7 +86,7 @@ export function ReportsPage() {
 
                   return (
                     <tr key={product.id}>
-                      <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
+                      <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                       <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
                       <td className="px-4 py-3 font-bold">{formatNumber(product.stock)}</td>
                       <td className="px-4 py-3">
@@ -121,7 +121,7 @@ export function ReportsPage() {
               <tbody className="divide-y divide-zinc-100">
                 {stats.topSellingProducts.map((product) => (
                   <tr key={product.name}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
+                    <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                     <td className="px-4 py-3 font-bold">{formatNumber(product.quantity)}</td>
                     <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(product.total)}</td>
                   </tr>

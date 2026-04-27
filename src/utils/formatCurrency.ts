@@ -11,13 +11,16 @@ export const normalizeDigits = (value: string) =>
     .replace(/٬/g, "");
 
 export const formatNumber = (value: number) =>
-  toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab").format(value));
+  toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {
+    maximumFractionDigits: 0,
+  }).format(value));
 
 export const formatCurrency = (value: number) =>
   toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {
     style: "currency",
     currency: "ILS",
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(value));
 
 export const formatDate = (value: string) =>

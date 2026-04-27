@@ -150,7 +150,7 @@ export function ProductsPage() {
 
                 return (
                   <tr key={product.id}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
+                    <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                     <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
                     <td className="px-4 py-3 font-bold">{formatCurrency(product.price)}</td>
                     <td className="px-4 py-3 font-bold">{formatNumber(product.stock)}</td>
@@ -196,7 +196,7 @@ export function ProductsPage() {
             <input
               value={toArabicDigits(form.name)}
               onChange={(event) => setForm((current) => ({ ...current, name: normalizeDigits(event.target.value) }))}
-              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
 
