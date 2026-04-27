@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { PackagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
@@ -98,11 +99,11 @@ export function ProductsPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">عدد المنتجات</p>
-          <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">{formatNumber(totalProducts)}</p>
+          <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(totalProducts)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">منتجات قليلة الكمية</p>
-          <p className="mt-1 text-2xl font-medium text-amber-700 sm:text-3xl">{formatNumber(lowStockCount)}</p>
+          <p className="mt-1 text-2xl font-medium text-amber-700 sm:text-3xl"><AnimatedDigits value={formatNumber(lowStockCount)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">إدارة محلية</p>
@@ -152,8 +153,8 @@ export function ProductsPage() {
                   <tr key={product.id}>
                     <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                     <td className="px-4 py-3 font-normal text-zinc-600">{product.barcode}</td>
-                    <td className="px-4 py-3 font-normal">{formatCurrency(product.price)}</td>
-                    <td className="px-4 py-3 font-normal">{formatNumber(product.stock)}</td>
+                    <td className="px-4 py-3 font-normal"><AnimatedDigits value={formatCurrency(product.price)} /></td>
+                    <td className="px-4 py-3 font-normal"><AnimatedDigits value={formatNumber(product.stock)} /></td>
                     <td className="px-4 py-3">
                       <StatusBadge className="!font-normal" tone={status.tone} size="sm">{status.label}</StatusBadge>
                     </td>

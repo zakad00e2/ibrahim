@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Eye, Pencil, Plus, ReceiptText, Search, Trash2, UserPlus, WalletCards } from "lucide-react";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { useAppStore } from "../store/AppStore";
@@ -134,16 +135,16 @@ export function CustomersPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">عدد العملاء</p>
-          <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">{formatNumber(customers.length)}</p>
+          <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(customers.length)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">إجمالي الديون</p>
-          <p className="mt-1 text-2xl font-medium text-red-700 sm:text-3xl">{formatCurrency(totalDebt)}</p>
+          <p className="mt-1 text-2xl font-medium text-red-700 sm:text-3xl"><AnimatedDigits value={formatCurrency(totalDebt)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">عملاء عليهم دين</p>
           <p className="mt-1 text-2xl font-medium text-amber-700 sm:text-3xl">
-            {formatNumber(customers.filter((customer) => calculateCustomerDebt(customer.debts) > 0).length)}
+            <AnimatedDigits value={formatNumber(customers.filter((customer) => calculateCustomerDebt(customer.debts) > 0).length)} />
           </p>
         </div>
       </section>
@@ -207,7 +208,7 @@ export function CustomersPage() {
                     <td className="font-features-normal px-4 py-3 font-medium text-zinc-950">{toArabicDigits(customer.name)}</td>
                     <td className="px-4 py-3 font-normal text-zinc-600">{customer.phone || "غير مسجل"}</td>
                     <td className={debt > 0 ? "px-4 py-3 font-medium text-red-700" : "px-4 py-3 font-medium text-emerald-700"}>
-                      {formatCurrency(debt)}
+                      <AnimatedDigits value={formatCurrency(debt)} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -305,7 +306,7 @@ export function CustomersPage() {
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-medium text-red-500">إجمالي الدين</p>
                 <p className="mt-1 font-medium text-red-700">
-                  {formatCurrency(calculateCustomerDebt(selectedCustomer.debts))}
+                  <AnimatedDigits value={formatCurrency(calculateCustomerDebt(selectedCustomer.debts))} />
                 </p>
               </div>
             </div>
@@ -364,9 +365,9 @@ export function CustomersPage() {
                       <tr key={debt.id}>
                         <td className="px-4 py-3 font-medium text-zinc-950">{debt.description}</td>
                         <td className="px-4 py-3 font-normal text-zinc-600">{formatDate(debt.date)}</td>
-                        <td className="px-4 py-3 font-medium">{formatCurrency(debt.amount)}</td>
-                        <td className="px-4 py-3 font-medium text-emerald-700">{formatCurrency(debt.paid)}</td>
-                        <td className="px-4 py-3 font-medium text-red-700">{formatCurrency(debt.remaining)}</td>
+                        <td className="px-4 py-3 font-medium"><AnimatedDigits value={formatCurrency(debt.amount)} /></td>
+                        <td className="px-4 py-3 font-medium text-emerald-700"><AnimatedDigits value={formatCurrency(debt.paid)} /></td>
+                        <td className="px-4 py-3 font-medium text-red-700"><AnimatedDigits value={formatCurrency(debt.remaining)} /></td>
                         <td className="px-4 py-3">
                           <Button
                             variant="secondary"
@@ -413,11 +414,11 @@ export function CustomersPage() {
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-xs font-medium text-emerald-700">المدفوع</p>
-                <p className="mt-1 font-medium text-emerald-700">{formatCurrency(selectedDebt.paid)}</p>
+                <p className="mt-1 font-medium text-emerald-700"><AnimatedDigits value={formatCurrency(selectedDebt.paid)} /></p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-medium text-red-700">المتبقي</p>
-                <p className="mt-1 font-medium text-red-700">{formatCurrency(selectedDebt.remaining)}</p>
+                <p className="mt-1 font-medium text-red-700"><AnimatedDigits value={formatCurrency(selectedDebt.remaining)} /></p>
               </div>
             </div>
 
@@ -436,9 +437,9 @@ export function CustomersPage() {
                     {selectedDebtInvoice.items.map((item) => (
                       <tr key={`${selectedDebtInvoice.id}-${item.productId}`}>
                         <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
-                        <td className="px-4 py-3 font-normal">{formatCurrency(item.price)}</td>
-                        <td className="px-4 py-3 font-medium">{formatNumber(item.quantity)}</td>
-                        <td className="px-4 py-3 font-medium text-brand-700">{formatCurrency(item.total)}</td>
+                        <td className="px-4 py-3 font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
+                        <td className="px-4 py-3 font-medium"><AnimatedDigits value={formatNumber(item.quantity)} /></td>
+                        <td className="px-4 py-3 font-medium text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
                       </tr>
                     ))}
                   </tbody>

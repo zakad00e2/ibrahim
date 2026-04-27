@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { AlertCircle, CheckCircle2, Minus, Plus, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
@@ -100,7 +101,7 @@ export function CashierPage() {
 
       if (existing) {
         return current.map((item) =>
-          item.productId === product.id
+          item.productId === product.id && item.quantity < product.stock
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -144,45 +145,33 @@ export function CashierPage() {
     setBarcode("");
   };
 
-  const increaseQuantity = (productId: string) => {
+  const updateItemQuantity = (productId: string, delta: number) => {
     const product = products.find((item) => item.id === productId);
-    const invoiceItem = items.find((item) => item.productId === productId);
 
-    if (!product || !invoiceItem) {
-      return;
-    }
-
-    if (invoiceItem.quantity >= product.stock) {
-      setNotice({ type: "error", text: "الكمية المطلوبة أكبر من المخزون المتاح" });
+    if (!product) {
       return;
     }
 
     setItems((current) =>
-      current.map((item) =>
-        item.productId === productId
-          ? {
-              ...item,
-              quantity: item.quantity + 1,
-              total: calculateInvoiceItemTotal(item.price, item.quantity + 1),
-            }
-          : item,
-      ),
+      current.map((item) => {
+        if (item.productId !== productId) {
+          return item;
+        }
+
+        const nextQuantity = Math.min(product.stock, Math.max(1, item.quantity + delta));
+
+        return {
+          ...item,
+          quantity: nextQuantity,
+          total: calculateInvoiceItemTotal(item.price, nextQuantity),
+        };
+      }),
     );
   };
 
-  const decreaseQuantity = (productId: string) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.productId === productId && item.quantity > 1
-          ? {
-              ...item,
-              quantity: item.quantity - 1,
-              total: calculateInvoiceItemTotal(item.price, item.quantity - 1),
-            }
-          : item,
-      ),
-    );
-  };
+  const increaseQuantity = (productId: string) => updateItemQuantity(productId, 1);
+
+  const decreaseQuantity = (productId: string) => updateItemQuantity(productId, -1);
 
   const removeItem = (productId: string) => {
     setItems((current) => current.filter((item) => item.productId !== productId));
@@ -337,8 +326,8 @@ export function CashierPage() {
                   <div className="mt-auto pt-3">
                     <p className="mb-2 text-xs font-semibold text-zinc-500">{product.barcode}</p>
                     <div className="flex items-end justify-between gap-3 text-sm font-bold">
-                      <span className="text-brand-700">{formatCurrency(product.price)}</span>
-                      <span className="font-normal text-zinc-500">المخزون: {formatNumber(product.stock)}</span>
+                      <span className="text-brand-700"><AnimatedDigits value={formatCurrency(product.price)} /></span>
+                      <span className="font-normal text-zinc-500">المخزون: <AnimatedDigits value={formatNumber(product.stock)} /></span>
                     </div>
                   </div>
                 </button>
@@ -358,7 +347,7 @@ export function CashierPage() {
                 <tr>
                   <th className="px-4 py-3 font-normal">اسم المنتج</th>
                   <th className="px-4 py-3 font-normal">السعر</th>
-                  <th className="px-4 py-3 font-normal">الكمية</th>
+                  <th className="px-4 py-3 text-center font-normal">الكمية</th>
                   <th className="px-4 py-3 font-normal">الإجمالي</th>
                   <th className="px-4 py-3 font-normal">إجراءات</th>
                 </tr>
@@ -373,34 +362,37 @@ export function CashierPage() {
                 ) : (
                   items.map((item) => (
                     <tr key={item.productId}>
-                      <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
-                      <td className="px-4 py-3 font-normal">{formatCurrency(item.price)}</td>
-                      <td className="px-4 py-3">
-                        <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+                      <td className="px-4 py-2 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
+                      <td className="px-4 py-2 text-base font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
+                      <td className="px-4 py-2 text-center">
+                        <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
                           <Button
                             size="icon"
                             variant="secondary"
-                            aria-label="زيادة الكمية"
-                            onClick={() => increaseQuantity(item.productId)}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                          <span className="w-8 text-center font-normal">{formatNumber(item.quantity)}</span>
-                          <Button
-                            size="icon"
-                            variant="secondary"
+                            className="h-7 w-7 rounded-md"
                             aria-label="تقليل الكمية"
                             onClick={() => decreaseQuantity(item.productId)}
                           >
-                            <Minus className="h-4 w-4" />
+                            <Minus className="h-3.5 w-3.5" />
+                          </Button>
+                          <span className="w-6 text-center font-normal"><AnimatedDigits value={formatNumber(item.quantity)} /></span>
+                          <Button
+                            size="icon"
+                            variant="secondary"
+                            className="h-7 w-7 rounded-md"
+                            aria-label="زيادة الكمية"
+                            onClick={() => increaseQuantity(item.productId)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-normal text-brand-700">{formatCurrency(item.total)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2 text-base font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
+                      <td className="px-4 py-2">
                         <Button
                           size="icon"
                           variant="ghost"
+                          className="h-8 w-8"
                           aria-label="حذف المنتج من الفاتورة"
                           onClick={() => removeItem(item.productId)}
                         >
@@ -422,15 +414,15 @@ export function CashierPage() {
         <dl className="mt-5 space-y-3">
           <div className="flex items-center justify-between">
             <dt className="font-normal text-zinc-500">المجموع الكلي</dt>
-            <dd className="text-xl font-normal text-zinc-950 sm:text-2xl">{formatCurrency(total)}</dd>
+            <dd className="text-xl font-normal text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(total)} /></dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="font-normal text-zinc-500">المبلغ المدفوع</dt>
-            <dd className="font-normal text-emerald-700">{formatCurrency(effectivePaid || 0)}</dd>
+            <dd className="font-normal text-emerald-700"><AnimatedDigits value={formatCurrency(effectivePaid || 0)} /></dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="font-normal text-zinc-500">المتبقـــــــــــــي</dt>
-            <dd className="font-normal text-red-700">{formatCurrency(remaining)}</dd>
+            <dd className="font-normal text-red-700"><AnimatedDigits value={formatCurrency(remaining)} /></dd>
           </div>
         </dl>
 

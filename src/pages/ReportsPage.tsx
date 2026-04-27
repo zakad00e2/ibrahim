@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { BarChart3, Boxes, ReceiptText, TrendingUp, WalletCards } from "lucide-react";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAppStore } from "../store/AppStore";
 import { calculateCustomerDebt, getStockStatus, getTopSellingProducts } from "../utils/calculations";
@@ -32,7 +33,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">مبيعات اليوم</p>
             <TrendingUp className="h-5 w-5 text-brand-600" />
           </div>
-          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatCurrency(stats.salesToday)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatCurrency(stats.salesToday)} /></p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -40,7 +41,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">عدد فواتير اليوم</p>
             <ReceiptText className="h-5 w-5 text-sky-600" />
           </div>
-          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatNumber(stats.invoicesToday)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(stats.invoicesToday)} /></p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -48,7 +49,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">إجمالي الديون</p>
             <WalletCards className="h-5 w-5 text-red-600" />
           </div>
-          <p className="mt-2 text-2xl font-extrabold text-red-700 sm:text-3xl">{formatCurrency(stats.totalDebt)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-red-700 sm:text-3xl"><AnimatedDigits value={formatCurrency(stats.totalDebt)} /></p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -56,7 +57,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">عدد المنتجات قليلة الكمية</p>
             <Boxes className="h-5 w-5 text-amber-600" />
           </div>
-          <p className="mt-2 text-2xl font-extrabold text-amber-700 sm:text-3xl">{formatNumber(stats.lowStockProducts.length)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-amber-700 sm:text-3xl"><AnimatedDigits value={formatNumber(stats.lowStockProducts.length)} /></p>
         </div>
       </section>
 
@@ -88,7 +89,7 @@ export function ReportsPage() {
                     <tr key={product.id}>
                       <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                       <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
-                      <td className="px-4 py-3 font-bold">{formatNumber(product.stock)}</td>
+                      <td className="px-4 py-3 font-bold"><AnimatedDigits value={formatNumber(product.stock)} /></td>
                       <td className="px-4 py-3">
                         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                       </td>
@@ -122,8 +123,8 @@ export function ReportsPage() {
                 {stats.topSellingProducts.map((product) => (
                   <tr key={product.name}>
                     <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
-                    <td className="px-4 py-3 font-bold">{formatNumber(product.quantity)}</td>
-                    <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(product.total)}</td>
+                    <td className="px-4 py-3 font-bold"><AnimatedDigits value={formatNumber(product.quantity)} /></td>
+                    <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(product.total)} /></td>
                   </tr>
                 ))}
               </tbody>

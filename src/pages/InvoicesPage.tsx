@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Eye, ReceiptText } from "lucide-react";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
@@ -23,18 +24,18 @@ export function InvoicesPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">عدد الفواتير</p>
-          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatNumber(invoices.length)}</p>
+          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(invoices.length)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">إجمالي المبيعات</p>
           <p className="mt-1 text-2xl font-extrabold text-brand-700 sm:text-3xl">
-            {formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.total, 0))}
+            <AnimatedDigits value={formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.total, 0))} />
           </p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">متبقي غير مسدد</p>
           <p className="mt-1 text-2xl font-extrabold text-red-700 sm:text-3xl">
-            {formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.remaining, 0))}
+            <AnimatedDigits value={formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.remaining, 0))} />
           </p>
         </div>
       </section>
@@ -68,9 +69,9 @@ export function InvoicesPage() {
                   <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(invoice.date)}</td>
                   <td className="font-features-normal px-4 py-3 font-bold">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
-                  <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(invoice.total)}</td>
-                  <td className="px-4 py-3 font-bold text-emerald-700">{formatCurrency(invoice.paid)}</td>
-                  <td className="px-4 py-3 font-bold text-red-700">{formatCurrency(invoice.remaining)}</td>
+                  <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(invoice.total)} /></td>
+                  <td className="px-4 py-3 font-bold text-emerald-700"><AnimatedDigits value={formatCurrency(invoice.paid)} /></td>
+                  <td className="px-4 py-3 font-bold text-red-700"><AnimatedDigits value={formatCurrency(invoice.remaining)} /></td>
                   <td className="px-4 py-3">
                     <StatusBadge tone={paymentTone[invoice.paymentMethod]}>
                       {getPaymentMethodLabel(invoice.paymentMethod)}
@@ -116,11 +117,11 @@ export function InvoicesPage() {
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-xs font-bold text-emerald-700">المدفوع</p>
-                <p className="mt-1 font-extrabold text-emerald-700">{formatCurrency(selectedInvoice.paid)}</p>
+                <p className="mt-1 font-extrabold text-emerald-700"><AnimatedDigits value={formatCurrency(selectedInvoice.paid)} /></p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-bold text-red-700">المتبقي</p>
-                <p className="mt-1 font-extrabold text-red-700">{formatCurrency(selectedInvoice.remaining)}</p>
+                <p className="mt-1 font-extrabold text-red-700"><AnimatedDigits value={formatCurrency(selectedInvoice.remaining)} /></p>
               </div>
             </div>
 
@@ -138,9 +139,9 @@ export function InvoicesPage() {
                   {selectedInvoice.items.map((item) => (
                     <tr key={`${selectedInvoice.id}-${item.productId}`}>
                       <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
-                      <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
-                      <td className="px-4 py-3 font-bold">{formatNumber(item.quantity)}</td>
-                      <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(item.total)}</td>
+                      <td className="px-4 py-3 font-semibold"><AnimatedDigits value={formatCurrency(item.price)} /></td>
+                      <td className="px-4 py-3 font-bold"><AnimatedDigits value={formatNumber(item.quantity)} /></td>
+                      <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
                     </tr>
                   ))}
                 </tbody>
