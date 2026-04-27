@@ -11,7 +11,7 @@ import {
   findProductByBarcode,
   getStockStatus,
 } from "../utils/calculations";
-import { formatCurrency } from "../utils/formatCurrency";
+import { formatCurrency, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
 
 type Notice = {
   type: "success" | "error";
@@ -49,7 +49,7 @@ export function CashierPage() {
   }, []);
 
   const filteredProducts = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = normalizeDigits(search).trim().toLowerCase();
 
     if (!term) {
       return products;
@@ -66,7 +66,7 @@ export function CashierPage() {
   );
 
   const filteredCustomers = useMemo(() => {
-    const term = customerSearch.trim().toLowerCase();
+    const term = normalizeDigits(customerSearch).trim().toLowerCase();
 
     if (!term) {
       return customers;
@@ -79,7 +79,7 @@ export function CashierPage() {
 
   const total = useMemo(() => calculateItemsTotal(items), [items]);
   const effectivePaid =
-    paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(paidAmount || 0);
+    paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
   const remaining = Math.max(total - (Number.isFinite(effectivePaid) ? effectivePaid : 0), 0);
 
   const addProductToInvoice = (product: Product) => {
@@ -123,7 +123,7 @@ export function CashierPage() {
       ];
     });
 
-    setNotice({ type: "success", text: `تمت إضافة ${product.name} إلى الفاتورة` });
+    setNotice({ type: "success", text: `تمت إضافة ${toArabicDigits(product.name)} إلى الفاتورة` });
   };
 
   const handleBarcodeEnter = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -132,7 +132,7 @@ export function CashierPage() {
     }
 
     event.preventDefault();
-    const product = findProductByBarcode(products, barcode);
+    const product = findProductByBarcode(products, normalizeDigits(barcode));
 
     if (!product) {
       setNotice({ type: "error", text: "الباركود غير موجود في قائمة المنتجات" });
@@ -245,7 +245,7 @@ export function CashierPage() {
       items,
       paymentMethod,
       customerId: selectedCustomerId || undefined,
-      paidAmount: Number(paidAmount || 0),
+      paidAmount: Number(normalizeDigits(paidAmount || "0")),
     });
 
     setNotice({ type: result.ok ? "success" : "error", text: result.message });
@@ -260,7 +260,7 @@ export function CashierPage() {
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="flex flex-col gap-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-sm font-extrabold text-zinc-900" htmlFor="barcode">
@@ -270,10 +270,10 @@ export function CashierPage() {
             ref={barcodeInputRef}
             id="barcode"
             value={barcode}
-            onChange={(event) => setBarcode(event.target.value)}
+            onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
             onKeyDown={handleBarcodeEnter}
             placeholder="اكتب أو امسح الباركود ثم اضغط Enter"
-            className="h-14 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-4 text-xl font-bold outline-none transition focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100 sm:h-14 sm:px-4 sm:text-xl"
           />
 
           {notice ? (
@@ -302,15 +302,15 @@ export function CashierPage() {
             <label className="relative block lg:w-80">
               <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                value={toArabicDigits(search)}
+                onChange={(event) => setSearch(normalizeDigits(event.target.value))}
                 placeholder="بحث بالاسم أو الباركود"
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-semibold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
             </label>
           </div>
 
-          <div className="grid gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 2xl:grid-cols-3">
             {filteredProducts.map((product) => {
               const status = getStockStatus(product.stock);
 
@@ -320,18 +320,20 @@ export function CashierPage() {
                   type="button"
                   onClick={() => addProductToInvoice(product)}
                   disabled={product.stock === 0}
-                  className="rounded-lg border border-zinc-200 bg-white p-3 text-right transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-60"
+                  className="flex min-h-28 flex-col rounded-lg border border-zinc-200 bg-white p-3 text-right transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-60 sm:min-h-32"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-extrabold text-zinc-950">{product.name}</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-500">{product.barcode}</p>
+                      <p className="font-extrabold text-zinc-950">{toArabicDigits(product.name)}</p>
                     </div>
                     <StatusBadge tone={status.tone} size="sm">{status.label}</StatusBadge>
                   </div>
-                  <div className="mt-3 flex items-end justify-between text-sm font-bold">
-                    <span className="text-brand-700">{formatCurrency(product.price)}</span>
-                    <span className="text-zinc-500">المخزون: {product.stock}</span>
+                  <div className="mt-auto pt-3">
+                    <p className="mb-2 text-xs font-semibold text-zinc-500">{product.barcode}</p>
+                    <div className="flex items-end justify-between gap-3 text-sm font-bold">
+                      <span className="text-brand-700">{formatCurrency(product.price)}</span>
+                      <span className="text-zinc-500">المخزون: {formatNumber(product.stock)}</span>
+                    </div>
                   </div>
                 </button>
               );
@@ -345,7 +347,7 @@ export function CashierPage() {
             <h3 className="text-lg font-extrabold text-zinc-950">الفاتورة الحالية</h3>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-right text-sm">
+            <table className="w-full min-w-[680px] text-right text-sm sm:min-w-[760px]">
               <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">اسم المنتج</th>
@@ -365,7 +367,7 @@ export function CashierPage() {
                 ) : (
                   items.map((item) => (
                     <tr key={item.productId}>
-                      <td className="px-4 py-3 font-bold text-zinc-950">{item.productName}</td>
+                      <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(item.productName)}</td>
                       <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
                       <td className="px-4 py-3">
                         <div className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
@@ -377,7 +379,7 @@ export function CashierPage() {
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
-                          <span className="w-8 text-center font-extrabold">{item.quantity}</span>
+                          <span className="w-8 text-center font-extrabold">{formatNumber(item.quantity)}</span>
                           <Button
                             size="icon"
                             variant="secondary"
@@ -408,13 +410,13 @@ export function CashierPage() {
         </div>
       </section>
 
-      <aside className="h-fit rounded-xl border border-zinc-200 bg-white p-5 shadow-sm xl:sticky xl:top-6">
+      <aside className="h-fit rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-5">
         <h3 className="text-xl font-extrabold text-zinc-950">ملخص الفاتورة</h3>
 
         <dl className="mt-5 space-y-3">
           <div className="flex items-center justify-between">
             <dt className="font-bold text-zinc-500">المجموع الكلي</dt>
-            <dd className="text-2xl font-extrabold text-zinc-950">{formatCurrency(total)}</dd>
+            <dd className="text-xl font-extrabold text-zinc-950 sm:text-2xl">{formatCurrency(total)}</dd>
           </div>
           <div className="flex items-center justify-between">
             <dt className="font-bold text-zinc-500">المبلغ المدفوع</dt>
@@ -435,7 +437,7 @@ export function CashierPage() {
                 type="button"
                 onClick={() => resetPaymentFields(option.value)}
                 className={[
-                  "rounded-lg border px-3 py-2 text-sm font-extrabold transition",
+                  "rounded-lg border px-2 py-2 text-xs font-extrabold transition sm:px-3 sm:text-sm",
                   paymentMethod === option.value
                     ? "border-brand-600 bg-brand-50 text-brand-700"
                     : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
@@ -464,9 +466,9 @@ export function CashierPage() {
             <label className="relative block">
               <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
-                value={customerSearch}
+                value={toArabicDigits(customerSearch)}
                 onChange={(event) => {
-                  setCustomerSearch(event.target.value);
+                  setCustomerSearch(normalizeDigits(event.target.value));
                   setSelectedCustomerId("");
                 }}
                 placeholder="ابحث باسم العميل أو رقم الهاتف"
@@ -488,8 +490,8 @@ export function CashierPage() {
                       selectedCustomerId === customer.id ? "bg-brand-50 text-brand-700" : "text-zinc-800",
                     ].join(" ")}
                   >
-                    <span className="font-extrabold">{customer.name}</span>
-                    <span className="text-xs font-semibold text-zinc-500">{customer.phone || "بدون هاتف"}</span>
+                    <span className="font-extrabold">{toArabicDigits(customer.name)}</span>
+                    <span className="text-xs font-semibold text-zinc-500">{customer.phone ? toArabicDigits(customer.phone) : "بدون هاتف"}</span>
                   </button>
                 ))
               )}
@@ -497,7 +499,7 @@ export function CashierPage() {
 
             {selectedCustomer ? (
               <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
-                العميل المختار: {selectedCustomer.name}
+                العميل المختار: {toArabicDigits(selectedCustomer.name)}
               </p>
             ) : null}
           </div>
@@ -507,11 +509,12 @@ export function CashierPage() {
           <label className="mt-4 block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">المبلغ المدفوع</span>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               min="0"
-              value={paidAmount}
-              onChange={(event) => setPaidAmount(event.target.value)}
-              placeholder="0"
+              value={toArabicDigits(paidAmount)}
+              onChange={(event) => setPaidAmount(normalizeDigits(event.target.value))}
+              placeholder="٠"
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
@@ -547,9 +550,9 @@ export function CashierPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">اسم العميل</span>
             <input
-              value={customerForm.name}
+              value={toArabicDigits(customerForm.name)}
               onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, name: event.target.value }))
+                setCustomerForm((current) => ({ ...current, name: normalizeDigits(event.target.value) }))
               }
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
@@ -558,9 +561,9 @@ export function CashierPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">رقم الهاتف</span>
             <input
-              value={customerForm.phone}
+              value={toArabicDigits(customerForm.phone)}
               onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, phone: event.target.value }))
+                setCustomerForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))
               }
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />

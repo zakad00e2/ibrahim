@@ -3,7 +3,7 @@ import { BarChart3, Boxes, ReceiptText, TrendingUp, WalletCards } from "lucide-r
 import { StatusBadge } from "../components/StatusBadge";
 import { useAppStore } from "../store/AppStore";
 import { calculateCustomerDebt, getStockStatus, getTopSellingProducts } from "../utils/calculations";
-import { formatCurrency } from "../utils/formatCurrency";
+import { formatCurrency, formatNumber, toArabicDigits } from "../utils/formatCurrency";
 
 const isToday = (value: string) => new Date(value).toDateString() === new Date().toDateString();
 
@@ -26,13 +26,13 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 min-[460px]:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-bold text-zinc-500">مبيعات اليوم</p>
             <TrendingUp className="h-5 w-5 text-brand-600" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-zinc-950">{formatCurrency(stats.salesToday)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatCurrency(stats.salesToday)}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -40,7 +40,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">عدد فواتير اليوم</p>
             <ReceiptText className="h-5 w-5 text-sky-600" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-zinc-950">{stats.invoicesToday}</p>
+          <p className="mt-2 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatNumber(stats.invoicesToday)}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -48,7 +48,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">إجمالي الديون</p>
             <WalletCards className="h-5 w-5 text-red-600" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-red-700">{formatCurrency(stats.totalDebt)}</p>
+          <p className="mt-2 text-2xl font-extrabold text-red-700 sm:text-3xl">{formatCurrency(stats.totalDebt)}</p>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
@@ -56,7 +56,7 @@ export function ReportsPage() {
             <p className="text-sm font-bold text-zinc-500">عدد المنتجات قليلة الكمية</p>
             <Boxes className="h-5 w-5 text-amber-600" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-amber-700">{stats.lowStockProducts.length}</p>
+          <p className="mt-2 text-2xl font-extrabold text-amber-700 sm:text-3xl">{formatNumber(stats.lowStockProducts.length)}</p>
         </div>
       </section>
 
@@ -71,7 +71,7 @@ export function ReportsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-right text-sm">
+            <table className="w-full min-w-[500px] text-right text-sm sm:min-w-[560px]">
               <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">المنتج</th>
@@ -86,9 +86,9 @@ export function ReportsPage() {
 
                   return (
                     <tr key={product.id}>
-                      <td className="px-4 py-3 font-extrabold text-zinc-950">{product.name}</td>
+                      <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
                       <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
-                      <td className="px-4 py-3 font-bold">{product.stock}</td>
+                      <td className="px-4 py-3 font-bold">{formatNumber(product.stock)}</td>
                       <td className="px-4 py-3">
                         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                       </td>
@@ -110,7 +110,7 @@ export function ReportsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-right text-sm">
+            <table className="w-full min-w-[500px] text-right text-sm sm:min-w-[560px]">
               <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                 <tr>
                   <th className="px-4 py-3">المنتج</th>
@@ -121,8 +121,8 @@ export function ReportsPage() {
               <tbody className="divide-y divide-zinc-100">
                 {stats.topSellingProducts.map((product) => (
                   <tr key={product.name}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{product.name}</td>
-                    <td className="px-4 py-3 font-bold">{product.quantity}</td>
+                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
+                    <td className="px-4 py-3 font-bold">{formatNumber(product.quantity)}</td>
                     <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(product.total)}</td>
                   </tr>
                 ))}

@@ -5,7 +5,7 @@ import { Modal } from "../components/Modal";
 import { useAppStore } from "../store/AppStore";
 import type { Customer, Debt } from "../types";
 import { calculateCustomerDebt } from "../utils/calculations";
-import { formatCurrency, formatDate } from "../utils/formatCurrency";
+import { formatCurrency, formatDate, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
 
 type CustomerForm = {
   name: string;
@@ -45,7 +45,7 @@ export function CustomersPage() {
   );
 
   const filteredCustomers = useMemo(() => {
-    const term = customerSearch.trim().toLowerCase();
+    const term = normalizeDigits(customerSearch).trim().toLowerCase();
 
     if (!term) {
       return customers;
@@ -105,7 +105,7 @@ export function CustomersPage() {
   };
 
   const handleDelete = (customer: Customer) => {
-    const confirmed = window.confirm(`هل تريد حذف العميل "${customer.name}"؟`);
+    const confirmed = window.confirm(`هل تريد حذف العميل "${toArabicDigits(customer.name)}"؟`);
 
     if (!confirmed) {
       return;
@@ -120,7 +120,7 @@ export function CustomersPage() {
       return;
     }
 
-    const result = payCustomerDebt(selectedCustomer.id, Number(paymentAmount));
+    const result = payCustomerDebt(selectedCustomer.id, Number(normalizeDigits(paymentAmount)));
     setMessage({ type: result.ok ? "success" : "error", text: result.message });
 
     if (result.ok) {
@@ -131,19 +131,19 @@ export function CustomersPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">عدد العملاء</p>
-          <p className="mt-1 text-3xl font-extrabold text-zinc-950">{customers.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatNumber(customers.length)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">إجمالي الديون</p>
-          <p className="mt-1 text-3xl font-extrabold text-red-700">{formatCurrency(totalDebt)}</p>
+          <p className="mt-1 text-2xl font-extrabold text-red-700 sm:text-3xl">{formatCurrency(totalDebt)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">عملاء عليهم دين</p>
-          <p className="mt-1 text-3xl font-extrabold text-amber-700">
-            {customers.filter((customer) => calculateCustomerDebt(customer.debts) > 0).length}
+          <p className="mt-1 text-2xl font-extrabold text-amber-700 sm:text-3xl">
+            {formatNumber(customers.filter((customer) => calculateCustomerDebt(customer.debts) > 0).length)}
           </p>
         </div>
       </section>
@@ -158,8 +158,8 @@ export function CustomersPage() {
             <label className="relative block sm:w-80">
               <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
-                value={customerSearch}
-                onChange={(event) => setCustomerSearch(event.target.value)}
+                value={toArabicDigits(customerSearch)}
+                onChange={(event) => setCustomerSearch(normalizeDigits(event.target.value))}
                 placeholder="ابحث باسم العميل أو رقم الهاتف"
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
@@ -182,7 +182,7 @@ export function CustomersPage() {
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-right text-sm">
+          <table className="w-full min-w-[680px] text-right text-sm sm:min-w-[760px]">
             <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
               <tr>
                 <th className="px-4 py-3">الاسم</th>
@@ -204,8 +204,8 @@ export function CustomersPage() {
 
                 return (
                   <tr key={customer.id}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{customer.name}</td>
-                    <td className="px-4 py-3 font-semibold text-zinc-600">{customer.phone || "غير مسجل"}</td>
+                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(customer.name)}</td>
+                    <td className="px-4 py-3 font-semibold text-zinc-600">{customer.phone ? toArabicDigits(customer.phone) : "غير مسجل"}</td>
                     <td className={debt > 0 ? "px-4 py-3 font-extrabold text-red-700" : "px-4 py-3 font-bold text-emerald-700"}>
                       {formatCurrency(debt)}
                     </td>
@@ -249,16 +249,16 @@ export function CustomersPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">اسم العميل</span>
             <input
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              value={toArabicDigits(form.name)}
+              onChange={(event) => setForm((current) => ({ ...current, name: normalizeDigits(event.target.value) }))}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">رقم الهاتف</span>
             <input
-              value={form.phone}
-              onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+              value={toArabicDigits(form.phone)}
+              onChange={(event) => setForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
@@ -293,14 +293,14 @@ export function CustomersPage() {
       >
         {selectedCustomer ? (
           <div className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">الاسم</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{selectedCustomer.name}</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{toArabicDigits(selectedCustomer.name)}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">رقم الهاتف</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{selectedCustomer.phone || "غير مسجل"}</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{selectedCustomer.phone ? toArabicDigits(selectedCustomer.phone) : "غير مسجل"}</p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-bold text-red-500">إجمالي الدين</p>
@@ -315,10 +315,11 @@ export function CustomersPage() {
                 <label className="block">
                   <span className="mb-2 block text-sm font-extrabold text-zinc-900">مبلغ الدفع</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     min="0"
-                    value={paymentAmount}
-                    onChange={(event) => setPaymentAmount(event.target.value)}
+                    value={toArabicDigits(paymentAmount)}
+                    onChange={(event) => setPaymentAmount(normalizeDigits(event.target.value))}
                     className="h-11 w-full rounded-lg border border-brand-200 bg-white px-3 text-sm font-bold outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100"
                   />
                 </label>
@@ -340,7 +341,7 @@ export function CustomersPage() {
             ) : null}
 
             <div className="overflow-x-auto rounded-lg border border-zinc-200">
-              <table className="w-full min-w-[780px] text-right text-sm">
+              <table className="w-full min-w-[720px] text-right text-sm sm:min-w-[780px]">
                 <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">الوصف</th>
@@ -361,7 +362,7 @@ export function CustomersPage() {
                   ) : (
                     selectedCustomer.debts.map((debt) => (
                       <tr key={debt.id}>
-                        <td className="px-4 py-3 font-bold text-zinc-950">{debt.description}</td>
+                        <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(debt.description)}</td>
                         <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(debt.date)}</td>
                         <td className="px-4 py-3 font-bold">{formatCurrency(debt.amount)}</td>
                         <td className="px-4 py-3 font-bold text-emerald-700">{formatCurrency(debt.paid)}</td>
@@ -388,7 +389,7 @@ export function CustomersPage() {
 
       <Modal
         open={Boolean(selectedDebt)}
-        title={selectedDebtInvoice ? `تفاصيل الفاتورة ${selectedDebtInvoice.number}` : "تفاصيل الفاتورة"}
+        title={selectedDebtInvoice ? `تفاصيل الفاتورة ${toArabicDigits(selectedDebtInvoice.number)}` : "تفاصيل الفاتورة"}
         onClose={() => setSelectedDebt(null)}
         size="lg"
         footer={
@@ -401,10 +402,10 @@ export function CustomersPage() {
       >
         {selectedDebt ? (
           <div className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">الوصف</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{selectedDebt.description}</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{toArabicDigits(selectedDebt.description)}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">التاريخ</p>
@@ -422,7 +423,7 @@ export function CustomersPage() {
 
             {selectedDebtInvoice ? (
               <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                <table className="w-full min-w-[680px] text-right text-sm">
+                <table className="w-full min-w-[620px] text-right text-sm sm:min-w-[680px]">
                   <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                     <tr>
                       <th className="px-4 py-3">اسم المنتج</th>
@@ -434,9 +435,9 @@ export function CustomersPage() {
                   <tbody className="divide-y divide-zinc-100">
                     {selectedDebtInvoice.items.map((item) => (
                       <tr key={`${selectedDebtInvoice.id}-${item.productId}`}>
-                        <td className="px-4 py-3 font-bold text-zinc-950">{item.productName}</td>
+                        <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(item.productName)}</td>
                         <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
-                        <td className="px-4 py-3 font-bold">{item.quantity}</td>
+                        <td className="px-4 py-3 font-bold">{formatNumber(item.quantity)}</td>
                         <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(item.total)}</td>
                       </tr>
                     ))}

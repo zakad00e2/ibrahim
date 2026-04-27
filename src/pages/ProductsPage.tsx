@@ -6,7 +6,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { useAppStore } from "../store/AppStore";
 import type { Product } from "../types";
 import { getStockStatus } from "../utils/calculations";
-import { formatCurrency } from "../utils/formatCurrency";
+import { formatCurrency, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
 
 type ProductForm = {
   name: string;
@@ -66,8 +66,8 @@ export function ProductsPage() {
     const input = {
       name: form.name,
       barcode: form.barcode,
-      price: Number(form.price),
-      stock: Number(form.stock || 0),
+      price: Number(normalizeDigits(form.price)),
+      stock: Number(normalizeDigits(form.stock || "0")),
     };
 
     const result = editingProduct
@@ -83,7 +83,7 @@ export function ProductsPage() {
   };
 
   const handleDelete = (product: Product) => {
-    const confirmed = window.confirm(`هل تريد حذف المنتج "${product.name}"؟`);
+    const confirmed = window.confirm(`هل تريد حذف المنتج "${toArabicDigits(product.name)}"؟`);
 
     if (!confirmed) {
       return;
@@ -95,18 +95,18 @@ export function ProductsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">عدد المنتجات</p>
-          <p className="mt-1 text-3xl font-extrabold text-zinc-950">{totalProducts}</p>
+          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl">{formatNumber(totalProducts)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">منتجات قليلة الكمية</p>
-          <p className="mt-1 text-3xl font-extrabold text-amber-700">{lowStockCount}</p>
+          <p className="mt-1 text-2xl font-extrabold text-amber-700 sm:text-3xl">{formatNumber(lowStockCount)}</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-bold text-zinc-500">إدارة محلية</p>
-          <p className="mt-1 text-base font-extrabold text-brand-700">React State</p>
+          <p className="mt-1 text-sm font-extrabold text-brand-700 sm:text-base">React State</p>
         </div>
       </section>
 
@@ -133,7 +133,7 @@ export function ProductsPage() {
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-right text-sm">
+          <table className="w-full min-w-[760px] text-right text-sm sm:min-w-[860px]">
             <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
               <tr>
                 <th className="px-4 py-3">الاسم</th>
@@ -150,10 +150,10 @@ export function ProductsPage() {
 
                 return (
                   <tr key={product.id}>
-                    <td className="px-4 py-3 font-extrabold text-zinc-950">{product.name}</td>
+                    <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(product.name)}</td>
                     <td className="px-4 py-3 font-semibold text-zinc-600">{product.barcode}</td>
                     <td className="px-4 py-3 font-bold">{formatCurrency(product.price)}</td>
-                    <td className="px-4 py-3 font-bold">{product.stock}</td>
+                    <td className="px-4 py-3 font-bold">{formatNumber(product.stock)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge tone={status.tone} size="sm">{status.label}</StatusBadge>
                     </td>
@@ -194,8 +194,8 @@ export function ProductsPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">اسم المنتج</span>
             <input
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              value={toArabicDigits(form.name)}
+              onChange={(event) => setForm((current) => ({ ...current, name: normalizeDigits(event.target.value) }))}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
@@ -204,7 +204,7 @@ export function ProductsPage() {
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">الباركود</span>
             <input
               value={form.barcode}
-              onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+              onChange={(event) => setForm((current) => ({ ...current, barcode: normalizeDigits(event.target.value) }))}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
@@ -213,11 +213,12 @@ export function ProductsPage() {
             <label className="block">
               <span className="mb-2 block text-sm font-extrabold text-zinc-900">السعر</span>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min="0"
                 step="0.01"
-                value={form.price}
-                onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))}
+                value={toArabicDigits(form.price)}
+                onChange={(event) => setForm((current) => ({ ...current, price: normalizeDigits(event.target.value) }))}
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
             </label>
@@ -225,10 +226,11 @@ export function ProductsPage() {
             <label className="block">
               <span className="mb-2 block text-sm font-extrabold text-zinc-900">الكمية</span>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min="0"
-                value={form.stock}
-                onChange={(event) => setForm((current) => ({ ...current, stock: event.target.value }))}
+                value={toArabicDigits(form.stock)}
+                onChange={(event) => setForm((current) => ({ ...current, stock: normalizeDigits(event.target.value) }))}
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
             </label>
