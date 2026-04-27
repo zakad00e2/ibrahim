@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Eye, Pencil, Plus, Trash2, UserPlus, WalletCards } from "lucide-react";
+import { Eye, Pencil, Plus, ReceiptText, Search, Trash2, UserPlus, WalletCards } from "lucide-react";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { useAppStore } from "../store/AppStore";
-import type { Customer } from "../types";
+import type { Customer, Debt } from "../types";
 import { calculateCustomerDebt } from "../utils/calculations";
 import { formatCurrency, formatDate } from "../utils/formatCurrency";
 
@@ -18,13 +18,15 @@ const emptyForm: CustomerForm = {
 };
 
 export function CustomersPage() {
-  const { customers, addCustomer, updateCustomer, deleteCustomer, payCustomerDebt } = useAppStore();
+  const { customers, invoices, addCustomer, updateCustomer, deleteCustomer, payCustomerDebt } = useAppStore();
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
   const [detailsCustomerId, setDetailsCustomerId] = useState<string | null>(null);
+  const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const selectedCustomer = useMemo(
@@ -36,6 +38,23 @@ export function CustomersPage() {
     () => customers.reduce((sum, customer) => sum + calculateCustomerDebt(customer.debts), 0),
     [customers],
   );
+
+  const selectedDebtInvoice = useMemo(
+    () => (selectedDebt ? invoices.find((invoice) => invoice.id === selectedDebt.invoiceId) ?? null : null),
+    [invoices, selectedDebt],
+  );
+
+  const filteredCustomers = useMemo(() => {
+    const term = customerSearch.trim().toLowerCase();
+
+    if (!term) {
+      return customers;
+    }
+
+    return customers.filter(
+      (customer) => customer.name.toLowerCase().includes(term) || customer.phone.includes(term),
+    );
+  }, [customers, customerSearch]);
 
   const openAddModal = () => {
     setEditingCustomer(null);
@@ -66,6 +85,7 @@ export function CustomersPage() {
 
   const closeDetails = () => {
     setDetailsCustomerId(null);
+    setSelectedDebt(null);
     setShowPaymentForm(false);
     setPaymentAmount("");
   };
@@ -129,14 +149,25 @@ export function CustomersPage() {
       </section>
 
       <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="text-lg font-extrabold text-zinc-950">قائمة العملاء</h3>
             <p className="text-sm font-semibold text-zinc-500">إدارة العملاء والديون محليًا داخل الواجهة</p>
           </div>
-          <Button icon={<Plus className="h-5 w-5" />} onClick={openAddModal}>
-            إضافة عميل
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="relative block sm:w-80">
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+              <input
+                value={customerSearch}
+                onChange={(event) => setCustomerSearch(event.target.value)}
+                placeholder="ابحث باسم العميل أو رقم الهاتف"
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+            <Button icon={<Plus className="h-5 w-5" />} onClick={openAddModal}>
+              إضافة عميل
+            </Button>
+          </div>
         </div>
 
         {message ? (
@@ -161,7 +192,14 @@ export function CustomersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {customers.map((customer) => {
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center font-semibold text-zinc-500">
+                    لا يوجد عملاء مطابقون للبحث
+                  </td>
+                </tr>
+              ) : (
+              filteredCustomers.map((customer) => {
                 const debt = calculateCustomerDebt(customer.debts);
 
                 return (
@@ -186,7 +224,7 @@ export function CustomersPage() {
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>
@@ -302,7 +340,7 @@ export function CustomersPage() {
             ) : null}
 
             <div className="overflow-x-auto rounded-lg border border-zinc-200">
-              <table className="w-full min-w-[680px] text-right text-sm">
+              <table className="w-full min-w-[780px] text-right text-sm">
                 <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">الوصف</th>
@@ -310,12 +348,13 @@ export function CustomersPage() {
                     <th className="px-4 py-3">أصل الدين</th>
                     <th className="px-4 py-3">المدفوع</th>
                     <th className="px-4 py-3">المتبقي</th>
+                    <th className="px-4 py-3">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
                   {selectedCustomer.debts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center font-semibold text-zinc-500">
+                      <td colSpan={6} className="px-4 py-8 text-center font-semibold text-zinc-500">
                         لا توجد ديون مسجلة على هذا العميل
                       </td>
                     </tr>
@@ -327,12 +366,88 @@ export function CustomersPage() {
                         <td className="px-4 py-3 font-bold">{formatCurrency(debt.amount)}</td>
                         <td className="px-4 py-3 font-bold text-emerald-700">{formatCurrency(debt.paid)}</td>
                         <td className="px-4 py-3 font-extrabold text-red-700">{formatCurrency(debt.remaining)}</td>
+                        <td className="px-4 py-3">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<ReceiptText className="h-4 w-4" />}
+                            onClick={() => setSelectedDebt(debt)}
+                          >
+                            عرض التفاصيل
+                          </Button>
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(selectedDebt)}
+        title={selectedDebtInvoice ? `تفاصيل الفاتورة ${selectedDebtInvoice.number}` : "تفاصيل الفاتورة"}
+        onClose={() => setSelectedDebt(null)}
+        size="lg"
+        footer={
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={() => setSelectedDebt(null)}>
+              إغلاق
+            </Button>
+          </div>
+        }
+      >
+        {selectedDebt ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg bg-zinc-50 p-4">
+                <p className="text-xs font-bold text-zinc-500">الوصف</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{selectedDebt.description}</p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 p-4">
+                <p className="text-xs font-bold text-zinc-500">التاريخ</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{formatDate(selectedDebt.date)}</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-4">
+                <p className="text-xs font-bold text-emerald-700">المدفوع</p>
+                <p className="mt-1 font-extrabold text-emerald-700">{formatCurrency(selectedDebt.paid)}</p>
+              </div>
+              <div className="rounded-lg bg-red-50 p-4">
+                <p className="text-xs font-bold text-red-700">المتبقي</p>
+                <p className="mt-1 font-extrabold text-red-700">{formatCurrency(selectedDebt.remaining)}</p>
+              </div>
+            </div>
+
+            {selectedDebtInvoice ? (
+              <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                <table className="w-full min-w-[680px] text-right text-sm">
+                  <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
+                    <tr>
+                      <th className="px-4 py-3">اسم المنتج</th>
+                      <th className="px-4 py-3">السعر</th>
+                      <th className="px-4 py-3">الكمية</th>
+                      <th className="px-4 py-3">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {selectedDebtInvoice.items.map((item) => (
+                      <tr key={`${selectedDebtInvoice.id}-${item.productId}`}>
+                        <td className="px-4 py-3 font-bold text-zinc-950">{item.productName}</td>
+                        <td className="px-4 py-3 font-semibold">{formatCurrency(item.price)}</td>
+                        <td className="px-4 py-3 font-bold">{item.quantity}</td>
+                        <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(item.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                تفاصيل المنتجات غير متوفرة لهذه الفاتورة التجريبية، لكن بيانات الدين الأساسية ظاهرة بالأعلى.
+              </div>
+            )}
           </div>
         ) : null}
       </Modal>
