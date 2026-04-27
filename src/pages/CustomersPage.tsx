@@ -205,7 +205,7 @@ export function CustomersPage() {
                 return (
                   <tr key={customer.id}>
                     <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(customer.name)}</td>
-                    <td className="px-4 py-3 font-semibold text-zinc-600">{customer.phone ? toArabicDigits(customer.phone) : "غير مسجل"}</td>
+                    <td className="px-4 py-3 font-semibold text-zinc-600">{customer.phone || "غير مسجل"}</td>
                     <td className={debt > 0 ? "px-4 py-3 font-extrabold text-red-700" : "px-4 py-3 font-bold text-emerald-700"}>
                       {formatCurrency(debt)}
                     </td>
@@ -257,7 +257,7 @@ export function CustomersPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">رقم الهاتف</span>
             <input
-              value={toArabicDigits(form.phone)}
+              value={form.phone}
               onChange={(event) => setForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-bold outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
@@ -300,7 +300,7 @@ export function CustomersPage() {
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">رقم الهاتف</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{selectedCustomer.phone ? toArabicDigits(selectedCustomer.phone) : "غير مسجل"}</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{selectedCustomer.phone || "غير مسجل"}</p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-bold text-red-500">إجمالي الدين</p>
@@ -362,7 +362,7 @@ export function CustomersPage() {
                   ) : (
                     selectedCustomer.debts.map((debt) => (
                       <tr key={debt.id}>
-                        <td className="px-4 py-3 font-bold text-zinc-950">{toArabicDigits(debt.description)}</td>
+                        <td className="px-4 py-3 font-bold text-zinc-950">{debt.description}</td>
                         <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(debt.date)}</td>
                         <td className="px-4 py-3 font-bold">{formatCurrency(debt.amount)}</td>
                         <td className="px-4 py-3 font-bold text-emerald-700">{formatCurrency(debt.paid)}</td>
@@ -389,7 +389,7 @@ export function CustomersPage() {
 
       <Modal
         open={Boolean(selectedDebt)}
-        title={selectedDebtInvoice ? `تفاصيل الفاتورة ${toArabicDigits(selectedDebtInvoice.number)}` : "تفاصيل الفاتورة"}
+        title={selectedDebtInvoice ? `تفاصيل الفاتورة ${selectedDebtInvoice.number}` : "تفاصيل الفاتورة"}
         onClose={() => setSelectedDebt(null)}
         size="lg"
         footer={
@@ -405,7 +405,7 @@ export function CustomersPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">الوصف</p>
-                <p className="mt-1 font-extrabold text-zinc-950">{toArabicDigits(selectedDebt.description)}</p>
+                <p className="mt-1 font-extrabold text-zinc-950">{selectedDebt.description}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-bold text-zinc-500">التاريخ</p>

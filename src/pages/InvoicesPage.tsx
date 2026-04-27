@@ -65,7 +65,7 @@ export function InvoicesPage() {
             <tbody className="divide-y divide-zinc-100">
               {invoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <td className="px-4 py-3 font-extrabold text-zinc-950">{toArabicDigits(invoice.number)}</td>
+                  <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(invoice.date)}</td>
                   <td className="px-4 py-3 font-bold">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
                   <td className="px-4 py-3 font-extrabold text-brand-700">{formatCurrency(invoice.total)}</td>
@@ -90,7 +90,7 @@ export function InvoicesPage() {
 
       <Modal
         open={Boolean(selectedInvoice)}
-        title={selectedInvoice ? `تفاصيل الفاتورة ${toArabicDigits(selectedInvoice.number)}` : "تفاصيل الفاتورة"}
+        title={selectedInvoice ? `تفاصيل الفاتورة ${selectedInvoice.number}` : "تفاصيل الفاتورة"}
         onClose={() => setSelectedInvoice(null)}
         size="lg"
         footer={

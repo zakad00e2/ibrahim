@@ -491,7 +491,7 @@ export function CashierPage() {
                     ].join(" ")}
                   >
                     <span className="font-extrabold">{toArabicDigits(customer.name)}</span>
-                    <span className="text-xs font-semibold text-zinc-500">{customer.phone ? toArabicDigits(customer.phone) : "بدون هاتف"}</span>
+                    <span className="text-xs font-semibold text-zinc-500">{customer.phone || "بدون هاتف"}</span>
                   </button>
                 ))
               )}
@@ -561,7 +561,7 @@ export function CashierPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-extrabold text-zinc-900">رقم الهاتف</span>
             <input
-              value={toArabicDigits(customerForm.phone)}
+              value={customerForm.phone}
               onChange={(event) =>
                 setCustomerForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))
               }
