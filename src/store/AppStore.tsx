@@ -12,6 +12,8 @@ import type {
   Customer,
   CustomerInput,
   Invoice,
+  InvoiceItem,
+  InvoiceUpdateRequest,
   Product,
   ProductInput,
   SaleRequest,
@@ -29,6 +31,7 @@ type AppStoreValue = {
   deleteCustomer: (id: string) => void;
   payCustomerDebt: (customerId: string, amount: number) => ActionResult;
   completeSale: (request: SaleRequest) => ActionResult;
+  updateInvoice: (id: string, request: InvoiceUpdateRequest) => ActionResult;
 };
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
@@ -300,6 +303,151 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return { ok: true, message: "تم إتمام البيع بنجاح" };
     };
 
+    const updateInvoice = (id: string, request: InvoiceUpdateRequest): ActionResult => {
+      const invoice = invoices.find((item) => item.id === id);
+
+      if (!invoice) {
+        return { ok: false, message: "الفاتورة غير موجودة" };
+      }
+
+      const previousItemsByProduct = new Map(invoice.items.map((item) => [item.productId, item]));
+      const nextItemsByProduct = new Map<string, InvoiceItem>();
+
+      request.items.forEach((item) => {
+        const quantity = Math.max(0, Math.floor(Number(item.quantity)));
+
+        if (!Number.isFinite(quantity) || quantity === 0) {
+          return;
+        }
+
+        const existing = nextItemsByProduct.get(item.productId);
+
+        nextItemsByProduct.set(item.productId, {
+          ...item,
+          quantity: (existing?.quantity ?? 0) + quantity,
+        });
+      });
+
+      const stockErrorItem = Array.from(nextItemsByProduct.values()).find((item) => {
+        const previousQuantity = previousItemsByProduct.get(item.productId)?.quantity ?? 0;
+        const neededQuantity = item.quantity - previousQuantity;
+        const product = products.find((productItem) => productItem.id === item.productId);
+
+        return neededQuantity > 0 && (!product || product.stock < neededQuantity);
+      });
+
+      if (stockErrorItem) {
+        return { ok: false, message: `الكمية المتوفرة من ${stockErrorItem.productName} غير كافية` };
+      }
+
+      const nextItems = Array.from(nextItemsByProduct.values()).map((item) => {
+        const product = products.find((productItem) => productItem.id === item.productId);
+        const previousItem = previousItemsByProduct.get(item.productId);
+        const price = Number.isFinite(item.price) && item.price > 0 ? item.price : (previousItem?.price ?? product?.price ?? 0);
+
+        return {
+          productId: item.productId,
+          productName: product?.name ?? previousItem?.productName ?? item.productName,
+          barcode: product?.barcode ?? previousItem?.barcode ?? item.barcode,
+          price,
+          quantity: item.quantity,
+          total: calculateInvoiceItemTotal(price, item.quantity),
+        };
+      });
+
+      const total = calculateItemsTotal(nextItems);
+      const paid =
+        invoice.paymentMethod === "cash"
+          ? total
+          : invoice.paymentMethod === "debt"
+            ? 0
+            : Math.min(invoice.paid, total);
+      const remaining = Math.max(total - paid, 0);
+
+      setInvoices((current) =>
+        current.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                items: nextItems,
+                total,
+                paid,
+                remaining,
+              }
+            : item,
+        ),
+      );
+
+      setProducts((current) =>
+        current.map((product) => {
+          const previousQuantity = previousItemsByProduct.get(product.id)?.quantity ?? 0;
+          const nextQuantity = nextItemsByProduct.get(product.id)?.quantity ?? 0;
+
+          return {
+            ...product,
+            stock: product.stock + previousQuantity - nextQuantity,
+          };
+        }),
+      );
+
+      if (invoice.customerId) {
+        setCustomers((current) =>
+          current.map((customer) => {
+            if (customer.id !== invoice.customerId) {
+              return customer;
+            }
+
+            const currentDebt = customer.debts.find((debt) => debt.invoiceId === invoice.id);
+
+            if (remaining <= 0) {
+              return {
+                ...customer,
+                debts: customer.debts.filter((debt) => debt.invoiceId !== invoice.id),
+              };
+            }
+
+            if (currentDebt) {
+              return {
+                ...customer,
+                debts: customer.debts.map((debt) => {
+                  if (debt.invoiceId !== invoice.id) {
+                    return debt;
+                  }
+
+                  const debtPaid = Math.min(debt.paid, remaining);
+
+                  return {
+                    ...debt,
+                    amount: remaining,
+                    paid: debtPaid,
+                    remaining: remaining - debtPaid,
+                  };
+                }),
+              };
+            }
+
+            return {
+              ...customer,
+              debts: [
+                ...customer.debts,
+                {
+                  id: createId("d"),
+                  invoiceId: invoice.id,
+                  description: `فاتورة رقم ${invoice.number}`,
+                  date: invoice.date,
+                  amount: remaining,
+                  paid: 0,
+                  remaining,
+                },
+              ],
+            };
+          }),
+        );
+      }
+
+      return { ok: true, message: "تم تعديل الفاتورة بنجاح" };
+    };
+
     return {
       products,
       customers,
@@ -312,6 +460,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       deleteCustomer,
       payCustomerDebt,
       completeSale,
+      updateInvoice,
     };
   }, [products, customers, invoices]);
 

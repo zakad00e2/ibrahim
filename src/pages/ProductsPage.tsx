@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { PackagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -29,12 +29,24 @@ export function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [search, setSearch] = useState("");
 
   const totalProducts = products.length;
   const lowStockCount = useMemo(
     () => products.filter((product) => product.stock > 0 && product.stock < 5).length,
     [products],
   );
+  const filteredProducts = useMemo(() => {
+    const term = normalizeDigits(search).trim().toLowerCase();
+
+    if (!term) {
+      return products;
+    }
+
+    return products.filter(
+      (product) => product.name.toLowerCase().includes(term) || product.barcode.includes(term),
+    );
+  }, [products, search]);
 
   const openAddModal = () => {
     setEditingProduct(null);
@@ -122,6 +134,18 @@ export function ProductsPage() {
           </Button>
         </div>
 
+        <div className="border-b border-zinc-100 px-4 py-3">
+          <label className="relative block sm:max-w-sm">
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+            <input
+              value={toArabicDigits(search)}
+              onChange={(event) => setSearch(normalizeDigits(event.target.value))}
+              placeholder="بحث بالاسم أو الباركود"
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            />
+          </label>
+        </div>
+
         {message ? (
           <div
             className={[
@@ -146,15 +170,26 @@ export function ProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {products.map((product) => {
+              {filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center font-normal text-zinc-500">
+                    لا توجد منتجات مطابقة للبحث
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => {
                 const status = getStockStatus(product.stock);
 
                 return (
                   <tr key={product.id}>
                     <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
                     <td className="px-4 py-3 font-normal text-zinc-600">{product.barcode}</td>
-                    <td className="px-4 py-3 font-normal"><AnimatedDigits value={formatCurrency(product.price)} /></td>
-                    <td className="px-4 py-3 font-normal"><AnimatedDigits value={formatNumber(product.stock)} /></td>
+                    <td className="px-4 py-3 text-base font-medium text-brand-700 sm:text-lg">
+                      <AnimatedDigits value={formatCurrency(product.price)} />
+                    </td>
+                    <td className="px-4 py-3 text-base font-medium text-zinc-950 sm:text-lg">
+                      <AnimatedDigits value={formatNumber(product.stock)} />
+                    </td>
                     <td className="px-4 py-3">
                       <StatusBadge className="!font-normal" tone={status.tone} size="sm">{status.label}</StatusBadge>
                     </td>
@@ -170,7 +205,8 @@ export function ProductsPage() {
                     </td>
                   </tr>
                 );
-              })}
+                })
+              )}
             </tbody>
           </table>
         </div>

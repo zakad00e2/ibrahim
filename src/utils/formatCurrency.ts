@@ -15,13 +15,7 @@ export const formatNumber = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value));
 
-export const formatCurrency = (value: number) =>
-  toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {
-    style: "currency",
-    currency: "ILS",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value));
+export const formatCurrency = (value: number) => `\u20AA ${formatNumber(value)}`;
 
 export const formatDate = (value: string) =>
   toArabicDigits(new Intl.DateTimeFormat("ar-EG-u-nu-arab", {

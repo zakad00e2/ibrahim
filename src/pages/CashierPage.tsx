@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { AlertCircle, CheckCircle2, Minus, Plus, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AlertCircle, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -10,6 +11,7 @@ import {
   calculateInvoiceItemTotal,
   calculateItemsTotal,
   findProductByBarcode,
+  getPaymentMethodLabel,
   getStockStatus,
 } from "../utils/calculations";
 import { formatCurrency, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
@@ -22,6 +24,15 @@ type Notice = {
 type CustomerForm = {
   name: string;
   phone: string;
+};
+
+type ReceiptSnapshot = {
+  items: InvoiceItem[];
+  total: number;
+  paid: number;
+  remaining: number;
+  paymentMethod: PaymentMethod;
+  customerName: string;
 };
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
@@ -43,11 +54,37 @@ export function CashierPage() {
   const [customerFormError, setCustomerFormError] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
+  const [printReceipt, setPrintReceipt] = useState<ReceiptSnapshot | null>(null);
+  const [printRequestId, setPrintRequestId] = useState(0);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!printReceipt || printRequestId === 0) {
+      return;
+    }
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        const previousTitle = document.title;
+        document.title = " ";
+        window.print();
+        window.setTimeout(() => {
+          document.title = previousTitle;
+        }, 1000);
+        barcodeInputRef.current?.focus();
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [printReceipt, printRequestId]);
 
   const filteredProducts = useMemo(() => {
     const term = normalizeDigits(search).trim().toLowerCase();
@@ -169,6 +206,31 @@ export function CashierPage() {
     );
   };
 
+  const setItemQuantity = (productId: string, quantityValue: string) => {
+    const product = products.find((item) => item.id === productId);
+
+    if (!product) {
+      return;
+    }
+
+    const parsedQuantity = Number.parseInt(normalizeDigits(quantityValue), 10);
+    const nextQuantity = Number.isFinite(parsedQuantity)
+      ? Math.min(product.stock, Math.max(1, parsedQuantity))
+      : 1;
+
+    setItems((current) =>
+      current.map((item) =>
+        item.productId === productId
+          ? {
+              ...item,
+              quantity: nextQuantity,
+              total: calculateInvoiceItemTotal(item.price, nextQuantity),
+            }
+          : item,
+      ),
+    );
+  };
+
   const increaseQuantity = (productId: string) => updateItemQuantity(productId, 1);
 
   const decreaseQuantity = (productId: string) => updateItemQuantity(productId, -1);
@@ -244,12 +306,49 @@ export function CashierPage() {
       setPaymentMethod("cash");
       setSelectedCustomerId("");
       setPaidAmount("");
+      setPrintReceipt(null);
       barcodeInputRef.current?.focus();
     }
   };
 
+  const handlePrintInvoice = () => {
+    if (items.length === 0) {
+      setNotice({ type: "error", text: "لا توجد منتجات في الفاتورة للطباعة" });
+      return;
+    }
+
+    if ((paymentMethod === "debt" || paymentMethod === "partial") && !selectedCustomer) {
+      setNotice({ type: "error", text: "اختر العميل قبل طباعة الفاتورة" });
+      return;
+    }
+
+    const paid =
+      paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
+
+    if (!Number.isFinite(paid) || paid < 0) {
+      setNotice({ type: "error", text: "أدخل مبلغ مدفوع صحيح قبل الطباعة" });
+      return;
+    }
+
+    if (paid > total) {
+      setNotice({ type: "error", text: "المبلغ المدفوع لا يمكن أن يتجاوز المجموع" });
+      return;
+    }
+
+    setPrintReceipt({
+      items: items.map((item) => ({ ...item })),
+      total,
+      paid,
+      remaining: Math.max(total - paid, 0),
+      paymentMethod,
+      customerName: selectedCustomer?.name ?? "بيع مباشر",
+    });
+    setPrintRequestId(Date.now());
+  };
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
+    <>
+    <div className="print-hidden grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="flex flex-col gap-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
@@ -375,7 +474,15 @@ export function CashierPage() {
                           >
                             <Minus className="h-3.5 w-3.5" />
                           </Button>
-                          <span className="w-6 text-center font-normal"><AnimatedDigits value={formatNumber(item.quantity)} /></span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            min="1"
+                            value={toArabicDigits(item.quantity)}
+                            onChange={(event) => setItemQuantity(item.productId, event.target.value)}
+                            aria-label="كتابة الكمية"
+                            className="h-7 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                          />
                           <Button
                             size="icon"
                             variant="secondary"
@@ -519,15 +626,28 @@ export function CashierPage() {
           </label>
         ) : null}
 
-        <Button
-          fullWidth
-          className="mt-6 !font-normal"
-          size="md"
-          onClick={handleCompleteSale}
-        >
-          إتمام البيع
-          <CheckCircle2 className="h-5 w-5" />
-        </Button>
+        <div className="mt-6 grid gap-2">
+          <Button
+            fullWidth
+            variant="secondary"
+            className="!font-normal"
+            size="md"
+            disabled={items.length === 0}
+            onClick={handlePrintInvoice}
+          >
+            طباعة الفاتورة
+            <Printer className="h-5 w-5" />
+          </Button>
+          <Button
+            fullWidth
+            className="!font-normal"
+            size="md"
+            onClick={handleCompleteSale}
+          >
+            إتمام البيع
+            <CheckCircle2 className="h-5 w-5" />
+          </Button>
+        </div>
       </aside>
 
       <Modal
@@ -576,5 +696,76 @@ export function CashierPage() {
         </form>
       </Modal>
     </div>
+    <PrintableInvoiceReceipt receipt={printReceipt} />
+    </>
+  );
+}
+
+function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null }) {
+  if (!receipt || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <section className="print-receipt" dir="rtl" aria-label="فاتورة حالية للطباعة">
+      <header className="print-receipt__header">
+        <p className="print-receipt__store">إبراهيم ماركت</p>
+        <h1>فاتورة حالية</h1>
+      </header>
+
+      <div className="print-receipt__meta">
+        <div>
+          <span>العميل</span>
+          <strong>{toArabicDigits(receipt.customerName)}</strong>
+        </div>
+        <div>
+          <span>طريقة الدفع</span>
+          <strong>{getPaymentMethodLabel(receipt.paymentMethod)}</strong>
+        </div>
+      </div>
+
+      <table className="print-receipt__items">
+        <thead>
+          <tr>
+            <th>الصنف</th>
+            <th>كمية</th>
+            <th>السعر</th>
+            <th>الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {receipt.items.map((item) => (
+            <tr key={item.productId}>
+              <td>
+                <span>{toArabicDigits(item.productName)}</span>
+              </td>
+              <td>{formatNumber(item.quantity)}</td>
+              <td>{formatCurrency(item.price)}</td>
+              <td>{formatCurrency(item.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <dl className="print-receipt__totals">
+        <div>
+          <dt>المجموع</dt>
+          <dd>{formatCurrency(receipt.total)}</dd>
+        </div>
+        <div>
+          <dt>المدفوع</dt>
+          <dd>{formatCurrency(receipt.paid)}</dd>
+        </div>
+        <div>
+          <dt>المتبقي</dt>
+          <dd>{formatCurrency(receipt.remaining)}</dd>
+        </div>
+      </dl>
+
+      <footer className="print-receipt__footer">
+        <p>هذه نسخة قبل حفظ البيع ولا تحتوي على رقم فاتورة رسمي.</p>
+      </footer>
+    </section>,
+    document.body,
   );
 }

@@ -66,6 +66,10 @@ export type SaleRequest = {
   paidAmount?: number;
 };
 
+export type InvoiceUpdateRequest = {
+  items: InvoiceItem[];
+};
+
 export type ActionResult = {
   ok: boolean;
   message: string;
