@@ -13,6 +13,7 @@ type ProductForm = {
   name: string;
   barcode: string;
   price: string;
+  wholesalePrice: string;
   stock: string;
 };
 
@@ -20,6 +21,7 @@ const emptyForm: ProductForm = {
   name: "",
   barcode: "",
   price: "",
+  wholesalePrice: "",
   stock: "0",
 };
 
@@ -61,6 +63,7 @@ export function ProductsPage() {
       name: product.name,
       barcode: product.barcode,
       price: String(product.price),
+      wholesalePrice: String(product.wholesalePrice),
       stock: String(product.stock),
     });
     setMessage(null);
@@ -80,6 +83,7 @@ export function ProductsPage() {
       name: form.name,
       barcode: form.barcode,
       price: Number(normalizeDigits(form.price)),
+      wholesalePrice: Number(normalizeDigits(form.wholesalePrice)),
       stock: Number(normalizeDigits(form.stock || "0")),
     };
 
@@ -158,12 +162,13 @@ export function ProductsPage() {
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-right text-sm sm:min-w-[860px]">
+          <table className="w-full min-w-[860px] text-right text-sm sm:min-w-[980px]">
             <thead className="bg-zinc-50 text-xs font-extrabold text-zinc-500">
               <tr>
                 <th className="px-4 py-3 font-normal">الاسم</th>
                 <th className="px-4 py-3 font-normal">الباركود</th>
-                <th className="px-4 py-3 font-normal">السعر</th>
+                <th className="px-4 py-3 font-normal">سعر البيع</th>
+                <th className="px-4 py-3 font-normal">سعر الجملة</th>
                 <th className="px-4 py-3 font-normal">الكمية المتوفرة</th>
                 <th className="px-4 py-3 font-normal">الحالة</th>
                 <th className="px-4 py-3 font-normal">إجراءات</th>
@@ -172,7 +177,7 @@ export function ProductsPage() {
             <tbody className="divide-y divide-zinc-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center font-normal text-zinc-500">
+                  <td colSpan={7} className="px-4 py-10 text-center font-normal text-zinc-500">
                     لا توجد منتجات مطابقة للبحث
                   </td>
                 </tr>
@@ -186,6 +191,9 @@ export function ProductsPage() {
                     <td className="px-4 py-3 font-normal text-zinc-600">{product.barcode}</td>
                     <td className="px-4 py-3 text-base font-medium text-brand-700 sm:text-lg">
                       <AnimatedDigits value={formatCurrency(product.price)} />
+                    </td>
+                    <td className="px-4 py-3 text-base font-medium text-zinc-700 sm:text-lg">
+                      <AnimatedDigits value={formatCurrency(product.wholesalePrice)} />
                     </td>
                     <td className="px-4 py-3 text-base font-medium text-zinc-950 sm:text-lg">
                       <AnimatedDigits value={formatNumber(product.stock)} />
@@ -246,9 +254,9 @@ export function ProductsPage() {
             />
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-2 block text-sm font-normal text-zinc-900">السعر</span>
+              <span className="mb-2 block text-sm font-normal text-zinc-900">سعر البيع</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -256,6 +264,19 @@ export function ProductsPage() {
                 step="0.01"
                 value={toArabicDigits(form.price)}
                 onChange={(event) => setForm((current) => ({ ...current, price: normalizeDigits(event.target.value) }))}
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-normal text-zinc-900">سعر الجملة</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={toArabicDigits(form.wholesalePrice)}
+                onChange={(event) => setForm((current) => ({ ...current, wholesalePrice: normalizeDigits(event.target.value) }))}
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
               />
             </label>

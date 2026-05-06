@@ -51,7 +51,15 @@ const validateProduct = (input: ProductInput, products: Product[], currentId?: s
   }
 
   if (!Number.isFinite(input.price) || input.price <= 0) {
-    return "السعر يجب أن يكون أكبر من صفر";
+    return "سعر البيع يجب أن يكون أكبر من صفر";
+  }
+
+  if (!Number.isFinite(input.wholesalePrice) || input.wholesalePrice <= 0) {
+    return "سعر الجملة يجب أن يكون أكبر من صفر";
+  }
+
+  if (input.price < input.wholesalePrice) {
+    return "سعر البيع لا يمكن أن يكون أقل من سعر الجملة";
   }
 
   if (!Number.isFinite(input.stock) || input.stock < 0) {
@@ -85,6 +93,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           name: input.name.trim(),
           barcode: input.barcode.trim(),
           price: input.price,
+          wholesalePrice: input.wholesalePrice,
           stock: input.stock,
         },
       ]);
@@ -107,6 +116,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
                 name: input.name.trim(),
                 barcode: input.barcode.trim(),
                 price: input.price,
+                wholesalePrice: input.wholesalePrice,
                 stock: input.stock,
               }
             : product,
@@ -125,7 +135,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: "اسم العميل مطلوب" };
       }
 
+      const initialDebt = Number(input.initialDebt ?? 0);
+
+      if (!Number.isFinite(initialDebt) || initialDebt < 0) {
+        return { ok: false, message: "أدخل مبلغ دين صحيح" };
+      }
+
       const id = createId("c");
+      const createdAt = new Date().toISOString();
 
       setCustomers((current) => [
         ...current,
@@ -133,7 +150,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           id,
           name: input.name.trim(),
           phone: input.phone.trim(),
-          debts: [],
+          debts:
+            initialDebt > 0
+              ? [
+                  {
+                    id: createId("d"),
+                    invoiceId: createId("opening"),
+                    description: "دين افتتاحي",
+                    date: createdAt,
+                    amount: initialDebt,
+                    paid: 0,
+                    remaining: initialDebt,
+                  },
+                ]
+              : [],
         },
       ]);
 
@@ -258,10 +288,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         date: new Date().toISOString(),
         customerId: customer?.id,
         customerName: customer?.name ?? "بيع مباشر",
-        items: request.items.map((item) => ({
-          ...item,
-          total: calculateInvoiceItemTotal(item.price, item.quantity),
-        })),
+        items: request.items.map((item) => {
+          const product = products.find((productItem) => productItem.id === item.productId);
+          const wholesalePrice =
+            Number.isFinite(item.wholesalePrice) && item.wholesalePrice > 0
+              ? item.wholesalePrice
+              : (product?.wholesalePrice ?? 0);
+
+          return {
+            ...item,
+            wholesalePrice,
+            total: calculateInvoiceItemTotal(item.price, item.quantity),
+          };
+        }),
         total,
         paid,
         remaining,
@@ -344,12 +383,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const product = products.find((productItem) => productItem.id === item.productId);
         const previousItem = previousItemsByProduct.get(item.productId);
         const price = Number.isFinite(item.price) && item.price > 0 ? item.price : (previousItem?.price ?? product?.price ?? 0);
+        const wholesalePrice =
+          Number.isFinite(item.wholesalePrice) && item.wholesalePrice > 0
+            ? item.wholesalePrice
+            : (previousItem?.wholesalePrice ?? product?.wholesalePrice ?? 0);
 
         return {
           productId: item.productId,
           productName: product?.name ?? previousItem?.productName ?? item.productName,
           barcode: product?.barcode ?? previousItem?.barcode ?? item.barcode,
           price,
+          wholesalePrice,
           quantity: item.quantity,
           total: calculateInvoiceItemTotal(price, item.quantity),
         };

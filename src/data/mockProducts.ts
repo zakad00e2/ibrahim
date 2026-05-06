@@ -6,6 +6,7 @@ export const mockProducts: Product[] = [
     name: "أرز مصري 1 كجم",
     barcode: "622100001001",
     price: 45,
+    wholesalePrice: 35,
     stock: 18,
   },
   {
@@ -13,6 +14,7 @@ export const mockProducts: Product[] = [
     name: "زيت عباد الشمس 1 لتر",
     barcode: "622100001002",
     price: 82,
+    wholesalePrice: 68,
     stock: 4,
   },
   {
@@ -20,6 +22,7 @@ export const mockProducts: Product[] = [
     name: "سكر أبيض 1 كجم",
     barcode: "622100001003",
     price: 38,
+    wholesalePrice: 29,
     stock: 12,
   },
   {
@@ -27,6 +30,7 @@ export const mockProducts: Product[] = [
     name: "شاي ناعم 250 جم",
     barcode: "622100001004",
     price: 64,
+    wholesalePrice: 52,
     stock: 7,
   },
   {
@@ -34,6 +38,7 @@ export const mockProducts: Product[] = [
     name: "مكرونة 400 جم",
     barcode: "622100001005",
     price: 18,
+    wholesalePrice: 12,
     stock: 25,
   },
   {
@@ -41,6 +46,7 @@ export const mockProducts: Product[] = [
     name: "لبن كامل الدسم 1 لتر",
     barcode: "622100001006",
     price: 35,
+    wholesalePrice: 27,
     stock: 3,
   },
   {
@@ -48,6 +54,7 @@ export const mockProducts: Product[] = [
     name: "صلصة طماطم 300 جم",
     barcode: "622100001007",
     price: 22,
+    wholesalePrice: 16,
     stock: 0,
   },
   {
@@ -55,6 +62,7 @@ export const mockProducts: Product[] = [
     name: "مناديل ورقية",
     barcode: "622100001008",
     price: 16,
+    wholesalePrice: 10,
     stock: 14,
   },
 ];

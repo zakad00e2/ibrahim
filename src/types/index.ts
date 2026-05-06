@@ -5,6 +5,7 @@ export type Product = {
   name: string;
   barcode: string;
   price: number;
+  wholesalePrice: number;
   stock: number;
 };
 
@@ -30,6 +31,7 @@ export type InvoiceItem = {
   productName: string;
   barcode: string;
   price: number;
+  wholesalePrice: number;
   quantity: number;
   total: number;
 };
@@ -51,12 +53,14 @@ export type ProductInput = {
   name: string;
   barcode: string;
   price: number;
+  wholesalePrice: number;
   stock: number;
 };
 
 export type CustomerInput = {
   name: string;
   phone: string;
+  initialDebt?: number;
 };
 
 export type SaleRequest = {

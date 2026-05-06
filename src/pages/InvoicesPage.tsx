@@ -81,6 +81,7 @@ export function InvoicesPage() {
               productName: product.name,
               barcode: product.barcode,
               price: product.price,
+              wholesalePrice: product.wholesalePrice,
               quantity: 0,
               total: 0,
             }
@@ -91,11 +92,13 @@ export function InvoicesPage() {
       }
 
       const price = baseItem.price || product?.price || 0;
+      const wholesalePrice = baseItem.wholesalePrice || product?.wholesalePrice || 0;
       const nextItem = {
         ...baseItem,
         productName: product?.name ?? baseItem.productName,
         barcode: product?.barcode ?? baseItem.barcode,
         price,
+        wholesalePrice,
         quantity: nextQuantity,
         total: calculateInvoiceItemTotal(price, nextQuantity),
       };

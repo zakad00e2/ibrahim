@@ -11,11 +11,13 @@ import { formatCurrency, formatDate, formatNumber, normalizeDigits, toArabicDigi
 type CustomerForm = {
   name: string;
   phone: string;
+  initialDebt: string;
 };
 
 const emptyForm: CustomerForm = {
   name: "",
   phone: "",
+  initialDebt: "",
 };
 
 export function CustomersPage() {
@@ -66,7 +68,7 @@ export function CustomersPage() {
 
   const openEditModal = (customer: Customer) => {
     setEditingCustomer(customer);
-    setForm({ name: customer.name, phone: customer.phone });
+    setForm({ name: customer.name, phone: customer.phone, initialDebt: "" });
     setMessage(null);
     setFormModalOpen(true);
   };
@@ -93,9 +95,15 @@ export function CustomersPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const input = {
+      name: form.name,
+      phone: form.phone,
+      initialDebt: editingCustomer ? undefined : Number(normalizeDigits(form.initialDebt || "0")),
+    };
+
     const result = editingCustomer
-      ? updateCustomer(editingCustomer.id, form)
-      : addCustomer(form);
+      ? updateCustomer(editingCustomer.id, input)
+      : addCustomer(input);
 
     setMessage({ type: result.ok ? "success" : "error", text: result.message });
 
@@ -207,7 +215,7 @@ export function CustomersPage() {
                   <tr key={customer.id}>
                     <td className="font-features-normal px-4 py-3 font-medium text-zinc-950">{toArabicDigits(customer.name)}</td>
                     <td className="px-4 py-3 font-normal text-zinc-600">{customer.phone || "غير مسجل"}</td>
-                    <td className={debt > 0 ? "px-4 py-3 font-medium text-red-700" : "px-4 py-3 font-medium text-emerald-700"}>
+                    <td className={debt > 0 ? "px-4 py-3 text-lg font-semibold text-red-700 sm:text-xl" : "px-4 py-3 text-lg font-semibold text-emerald-700 sm:text-xl"}>
                       <AnimatedDigits value={formatCurrency(debt)} />
                     </td>
                     <td className="px-4 py-3">
@@ -263,6 +271,23 @@ export function CustomersPage() {
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
+
+          {!editingCustomer ? (
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-zinc-900">الدين الحالي</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                min="0"
+                value={toArabicDigits(form.initialDebt)}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, initialDebt: normalizeDigits(event.target.value) }))
+                }
+                placeholder="اختياري"
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </label>
+          ) : null}
 
           {message?.type === "error" ? (
             <div className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{message.text}</div>

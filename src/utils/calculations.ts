@@ -5,6 +5,15 @@ export const calculateInvoiceItemTotal = (price: number, quantity: number) => pr
 export const calculateItemsTotal = (items: InvoiceItem[]) =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+export const calculateInvoiceItemCost = (wholesalePrice: number, quantity: number) =>
+  wholesalePrice * quantity;
+
+export const calculateItemsCost = (items: InvoiceItem[]) =>
+  items.reduce((sum, item) => sum + calculateInvoiceItemCost(item.wholesalePrice, item.quantity), 0);
+
+export const calculateItemsProfit = (items: InvoiceItem[]) =>
+  items.reduce((sum, item) => sum + (item.price - item.wholesalePrice) * item.quantity, 0);
+
 export const calculateCustomerDebt = (debts: Customer["debts"]) =>
   debts.reduce((sum, debt) => sum + debt.remaining, 0);
 

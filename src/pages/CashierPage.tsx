@@ -24,6 +24,7 @@ type Notice = {
 type CustomerForm = {
   name: string;
   phone: string;
+  initialDebt: string;
 };
 
 type ReceiptSnapshot = {
@@ -50,7 +51,7 @@ export function CashierPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
-  const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "" });
+  const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "", initialDebt: "" });
   const [customerFormError, setCustomerFormError] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
@@ -155,6 +156,7 @@ export function CashierPage() {
           productName: product.name,
           barcode: product.barcode,
           price: product.price,
+          wholesalePrice: product.wholesalePrice,
           quantity: 1,
           total: product.price,
         },
@@ -261,21 +263,25 @@ export function CashierPage() {
   };
 
   const openCustomerModal = () => {
-    setCustomerForm({ name: customerSearch, phone: "" });
+    setCustomerForm({ name: customerSearch, phone: "", initialDebt: "" });
     setCustomerFormError("");
     setCustomerModalOpen(true);
   };
 
   const closeCustomerModal = () => {
     setCustomerModalOpen(false);
-    setCustomerForm({ name: "", phone: "" });
+    setCustomerForm({ name: "", phone: "", initialDebt: "" });
     setCustomerFormError("");
   };
 
   const handleAddCustomer = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const result = addCustomer(customerForm);
+    const result = addCustomer({
+      name: customerForm.name,
+      phone: customerForm.phone,
+      initialDebt: Number(normalizeDigits(customerForm.initialDebt || "0")),
+    });
 
     if (!result.ok) {
       setCustomerFormError(result.message);
@@ -684,6 +690,21 @@ export function CashierPage() {
               onChange={(event) =>
                 setCustomerForm((current) => ({ ...current, phone: normalizeDigits(event.target.value) }))
               }
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-normal text-zinc-900">الدين الحالي</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              min="0"
+              value={toArabicDigits(customerForm.initialDebt)}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, initialDebt: normalizeDigits(event.target.value) }))
+              }
+              placeholder="اختياري"
               className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
             />
           </label>
