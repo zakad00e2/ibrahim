@@ -28,16 +28,16 @@ export function Modal({ open, title, children, footer, onClose, size = "md" }: M
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`max-h-[94dvh] w-full ${sizeClasses[size]} overflow-hidden rounded-lg bg-white shadow-panel sm:rounded-xl`}
+        className={`flex max-h-[94dvh] w-full ${sizeClasses[size]} flex-col overflow-hidden rounded-lg bg-white shadow-panel sm:rounded-xl`}
       >
-        <header className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 sm:px-5 sm:py-4">
+        <header className="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3 sm:px-5 sm:py-4">
           <h2 className="text-lg font-bold text-zinc-950">{title}</h2>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="إغلاق">
             <X className="h-5 w-5" />
           </Button>
         </header>
-        <div className="max-h-[calc(94dvh-8rem)] overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">{children}</div>
-        {footer ? <footer className="border-t border-zinc-100 px-4 py-3 sm:px-5 sm:py-4">{footer}</footer> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">{children}</div>
+        {footer ? <footer className="shrink-0 border-t border-zinc-100 px-4 py-4 sm:px-5 sm:py-5">{footer}</footer> : null}
       </section>
     </div>
   );

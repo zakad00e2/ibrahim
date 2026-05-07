@@ -58,7 +58,7 @@ export function ReportsPage() {
       <section className="grid gap-3 min-[460px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-500">مبيعات اليوم</p>
+            <p className="text-sm font-normal text-zinc-500">مبيعات اليوم</p>
             <TrendingUp className="h-5 w-5 text-brand-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatCurrency(stats.salesToday)} /></p>
@@ -66,7 +66,7 @@ export function ReportsPage() {
 
         <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-500">ربح اليوم</p>
+            <p className="text-sm font-normal text-zinc-500">ربح اليوم</p>
             <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-emerald-700 sm:text-3xl"><AnimatedDigits value={formatCurrency(stats.profitToday)} /></p>
@@ -74,7 +74,7 @@ export function ReportsPage() {
 
         <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-500">عدد فواتير اليوم</p>
+            <p className="text-sm font-normal text-zinc-500">عدد فواتير اليوم</p>
             <ReceiptText className="h-5 w-5 text-sky-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(stats.invoicesToday)} /></p>
@@ -82,7 +82,7 @@ export function ReportsPage() {
 
         <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-500">إجمالي الديون</p>
+            <p className="text-sm font-normal text-zinc-500">إجمالي الديون</p>
             <WalletCards className="h-5 w-5 text-red-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-red-700 sm:text-3xl"><AnimatedDigits value={formatCurrency(stats.totalDebt)} /></p>
@@ -90,7 +90,7 @@ export function ReportsPage() {
 
         <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-bold text-zinc-500">عدد المنتجات قليلة الكمية</p>
+            <p className="text-sm font-normal text-zinc-500">عدد المنتجات قليلة الكمية</p>
             <Boxes className="h-5 w-5 text-amber-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-amber-700 sm:text-3xl"><AnimatedDigits value={formatNumber(stats.lowStockProducts.length)} /></p>
@@ -103,7 +103,7 @@ export function ReportsPage() {
             <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
             <div>
               <h3 className="text-lg font-extrabold text-zinc-950">أرباح منتجات اليوم</h3>
-              <p className="text-sm font-semibold text-zinc-500">الربح محسوب من كل فواتير اليوم كاش أو دين</p>
+              <p className="text-sm font-normal text-zinc-500">الربح محسوب من كل فواتير اليوم كاش أو دين</p>
             </div>
           </div>
 
@@ -129,10 +129,10 @@ export function ReportsPage() {
                   stats.dailyProductProfits.map((product) => (
                     <tr key={product.name}>
                       <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(product.name)}</td>
-                      <td className="px-4 py-3 font-bold"><AnimatedDigits value={formatNumber(product.quantity)} /></td>
-                      <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(product.sales)} /></td>
-                      <td className="px-4 py-3 font-bold text-zinc-700"><AnimatedDigits value={formatCurrency(product.cost)} /></td>
-                      <td className="px-4 py-3 font-extrabold text-emerald-700"><AnimatedDigits value={formatCurrency(product.profit)} /></td>
+                      <td className="px-4 py-3 font-medium"><AnimatedDigits value={formatNumber(product.quantity)} /></td>
+                      <td className="px-4 py-3 font-medium text-brand-700"><AnimatedDigits value={formatCurrency(product.sales)} /></td>
+                      <td className="px-4 py-3 font-medium text-zinc-700"><AnimatedDigits value={formatCurrency(product.cost)} /></td>
+                      <td className="px-4 py-3 font-medium text-emerald-700"><AnimatedDigits value={formatCurrency(product.profit)} /></td>
                     </tr>
                   ))
                 )}
@@ -146,7 +146,7 @@ export function ReportsPage() {
             <Boxes className="h-5 w-5 text-amber-600" />
             <div>
               <h3 className="text-lg font-extrabold text-zinc-950">المنتجات قليلة الكمية</h3>
-              <p className="text-sm font-semibold text-zinc-500">المنتجات التي تحتاج متابعة مخزون</p>
+              <p className="text-sm font-normal text-zinc-500">المنتجات التي تحتاج متابعة مخزون</p>
             </div>
           </div>
 
@@ -185,7 +185,7 @@ export function ReportsPage() {
             <BarChart3 className="h-5 w-5 text-brand-600" />
             <div>
               <h3 className="text-lg font-extrabold text-zinc-950">أكثر المنتجات مبيعًا</h3>
-              <p className="text-sm font-semibold text-zinc-500">تجميع من بيانات الفواتير التجريبية والحالية</p>
+              <p className="text-sm font-normal text-zinc-500">تجميع من بيانات الفواتير التجريبية والحالية</p>
             </div>
           </div>
 

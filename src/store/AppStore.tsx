@@ -32,6 +32,7 @@ type AppStoreValue = {
   payCustomerDebt: (customerId: string, amount: number) => ActionResult;
   completeSale: (request: SaleRequest) => ActionResult;
   updateInvoice: (id: string, request: InvoiceUpdateRequest) => ActionResult;
+  deleteInvoice: (id: string) => ActionResult;
 };
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
@@ -492,6 +493,39 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return { ok: true, message: "تم تعديل الفاتورة بنجاح" };
     };
 
+    const deleteInvoice = (id: string): ActionResult => {
+      const invoice = invoices.find((item) => item.id === id);
+
+      if (!invoice) {
+        return { ok: false, message: "الفاتورة غير موجودة" };
+      }
+
+      setInvoices((current) => current.filter((item) => item.id !== id));
+
+      setProducts((current) =>
+        current.map((product) => {
+          const invoiceItem = invoice.items.find((item) => item.productId === product.id);
+
+          return invoiceItem ? { ...product, stock: product.stock + invoiceItem.quantity } : product;
+        }),
+      );
+
+      if (invoice.customerId) {
+        setCustomers((current) =>
+          current.map((customer) =>
+            customer.id === invoice.customerId
+              ? {
+                  ...customer,
+                  debts: customer.debts.filter((debt) => debt.invoiceId !== invoice.id),
+                }
+              : customer,
+          ),
+        );
+      }
+
+      return { ok: true, message: "تم حذف الفاتورة بنجاح" };
+    };
+
     return {
       products,
       customers,
@@ -505,6 +539,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       payCustomerDebt,
       completeSale,
       updateInvoice,
+      deleteInvoice,
     };
   }, [products, customers, invoices]);
 

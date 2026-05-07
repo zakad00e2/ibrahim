@@ -16,12 +16,13 @@ const paymentTone = {
 } as const;
 
 export function InvoicesPage() {
-  const { invoices, products, updateInvoice } = useAppStore();
+  const { invoices, products, updateInvoice, deleteInvoice } = useAppStore();
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editItems, setEditItems] = useState<InvoiceItem[]>([]);
   const [editSearch, setEditSearch] = useState("");
   const [editMessage, setEditMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const openEditModal = (invoice: Invoice) => {
     setEditingInvoice(invoice);
@@ -149,33 +150,65 @@ export function InvoicesPage() {
     }
   };
 
+  const handleDeleteInvoice = (invoice: Invoice) => {
+    const confirmed = window.confirm(`هل تريد حذف الفاتورة ${invoice.number}؟`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    const result = deleteInvoice(invoice.id);
+    setPageMessage({ type: result.ok ? "success" : "error", text: result.message });
+
+    if (result.ok) {
+      if (selectedInvoice?.id === invoice.id) {
+        setSelectedInvoice(null);
+      }
+
+      if (editingInvoice?.id === invoice.id) {
+        closeEditModal();
+      }
+    }
+  };
+
   return (
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-bold text-zinc-500">عدد الفواتير</p>
+          <p className="text-sm font-normal text-zinc-500">عدد الفواتير</p>
           <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(invoices.length)} /></p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-bold text-zinc-500">إجمالي المبيعات</p>
+          <p className="text-sm font-normal text-zinc-500">إجمالي المبيعات</p>
           <p className="mt-1 text-2xl font-extrabold text-brand-700 sm:text-3xl">
             <AnimatedDigits value={formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.total, 0))} />
           </p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <p className="text-sm font-bold text-zinc-500">متبقي غير مسدد</p>
+          <p className="text-sm font-normal text-zinc-500">متبقي غير مسدد</p>
           <p className="mt-1 text-2xl font-extrabold text-red-700 sm:text-3xl">
             <AnimatedDigits value={formatCurrency(invoices.reduce((sum, invoice) => sum + invoice.remaining, 0))} />
           </p>
         </div>
       </section>
 
+      {pageMessage ? (
+        <div
+          className={[
+            "rounded-lg px-3 py-2 text-sm font-normal",
+            pageMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
+          ].join(" ")}
+        >
+          {pageMessage.text}
+        </div>
+      ) : null}
+
       <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-zinc-100 p-4">
           <ReceiptText className="h-5 w-5 text-brand-600" />
           <div>
             <h3 className="text-lg font-extrabold text-zinc-950">الفواتير</h3>
-            <p className="text-sm font-semibold text-zinc-500">فواتير تجريبية والفواتير التي تتم من شاشة الكاشير</p>
+            <p className="text-sm font-normal text-zinc-500">فواتير تجريبية والفواتير التي تتم من شاشة الكاشير</p>
           </div>
         </div>
 
@@ -197,23 +230,31 @@ export function InvoicesPage() {
               {invoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
-                  <td className="px-4 py-3 font-semibold text-zinc-600">{formatDate(invoice.date)}</td>
-                  <td className="font-features-normal px-4 py-3 font-bold">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
-                  <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(invoice.total)} /></td>
-                  <td className="px-4 py-3 font-bold text-emerald-700"><AnimatedDigits value={formatCurrency(invoice.paid)} /></td>
-                  <td className="px-4 py-3 font-bold text-red-700"><AnimatedDigits value={formatCurrency(invoice.remaining)} /></td>
+                  <td className="px-4 py-3 font-normal text-zinc-600">{formatDate(invoice.date)}</td>
+                  <td className="font-features-normal px-4 py-3 font-medium">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
+                  <td className="px-4 py-3 text-lg font-medium text-brand-700"><AnimatedDigits value={formatCurrency(invoice.total)} /></td>
+                  <td className="px-4 py-3 text-lg font-medium text-emerald-700"><AnimatedDigits value={formatCurrency(invoice.paid)} /></td>
+                  <td className="px-4 py-3 text-lg font-medium text-red-700"><AnimatedDigits value={formatCurrency(invoice.remaining)} /></td>
                   <td className="px-4 py-3">
-                    <StatusBadge tone={paymentTone[invoice.paymentMethod]}>
+                    <StatusBadge tone={paymentTone[invoice.paymentMethod]} className="!font-normal">
                       {getPaymentMethodLabel(invoice.paymentMethod)}
                     </StatusBadge>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                    <Button variant="secondary" size="sm" icon={<Eye className="h-4 w-4" />} onClick={() => setSelectedInvoice(invoice)}>
-                      عرض التفاصيل
-                    </Button>
-                      <Button className="!font-normal" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => openEditModal(invoice)}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="secondary" size="sm" icon={<Eye className="h-4 w-4" />} onClick={() => setSelectedInvoice(invoice)}>
+                        التفاصيل
+                      </Button>
+                      <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => openEditModal(invoice)}>
                         تعديل
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="حذف الفاتورة"
+                        onClick={() => handleDeleteInvoice(invoice)}
+                      >
+                        <Trash2 className="h-5 w-5 text-red-600" />
                       </Button>
                     </div>
                   </td>
@@ -246,21 +287,21 @@ export function InvoicesPage() {
           <div className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-zinc-50 p-4">
-                <p className="text-xs font-bold text-zinc-500">العميل</p>
-                <p className="font-features-normal mt-1 font-extrabold text-zinc-950">{selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}</p>
+                <p className="text-xs font-normal text-zinc-500">العميل</p>
+                <p className="font-features-normal mt-1 font-medium text-zinc-950">{selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}</p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
-                <p className="text-xs font-bold text-zinc-500">طريقة الدفع</p>
-                <p className="mt-1 font-extrabold text-zinc-950">
+                <p className="text-xs font-normal text-zinc-500">طريقة الدفع</p>
+                <p className="mt-1 font-medium text-zinc-950">
                   {getPaymentMethodLabel(selectedInvoice.paymentMethod)}
                 </p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
-                <p className="text-xs font-bold text-emerald-700">المدفوع</p>
+                <p className="text-xs font-normal text-emerald-700">المدفوع</p>
                 <p className="mt-1 font-extrabold text-emerald-700"><AnimatedDigits value={formatCurrency(selectedInvoice.paid)} /></p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
-                <p className="text-xs font-bold text-red-700">المتبقي</p>
+                <p className="text-xs font-normal text-red-700">المتبقي</p>
                 <p className="mt-1 font-extrabold text-red-700"><AnimatedDigits value={formatCurrency(selectedInvoice.remaining)} /></p>
               </div>
             </div>
@@ -297,7 +338,7 @@ export function InvoicesPage() {
         onClose={closeEditModal}
         size="xl"
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 px-1 py-1 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={closeEditModal}>
               إلغاء
             </Button>
@@ -311,19 +352,19 @@ export function InvoicesPage() {
           <div className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-zinc-50 p-4">
-                <p className="text-xs font-bold text-zinc-500">الإجمالي بعد التعديل</p>
+                <p className="text-xs font-normal text-zinc-500">الإجمالي بعد التعديل</p>
                 <p className="mt-1 text-lg font-extrabold text-brand-700">
                   <AnimatedDigits value={formatCurrency(editTotal)} />
                 </p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
-                <p className="text-xs font-bold text-emerald-700">المدفوع</p>
+                <p className="text-xs font-normal text-emerald-700">المدفوع</p>
                 <p className="mt-1 text-lg font-extrabold text-emerald-700">
                   <AnimatedDigits value={formatCurrency(editPaid)} />
                 </p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
-                <p className="text-xs font-bold text-red-700">المتبقي</p>
+                <p className="text-xs font-normal text-red-700">المتبقي</p>
                 <p className="mt-1 text-lg font-extrabold text-red-700">
                   <AnimatedDigits value={formatCurrency(editRemaining)} />
                 </p>
