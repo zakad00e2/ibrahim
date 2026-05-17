@@ -1,5 +1,12 @@
 import { normalizeMessage, postJson, readJson } from "./apiClient";
-import type { AuthSession, AuthUser, LoginRequest, RegisterRequest, VerifyEmailRequest } from "../types";
+import type {
+  AuthSession,
+  AuthUser,
+  LoginRequest,
+  RegisterRequest,
+  ResetPasswordRequest,
+  VerifyEmailRequest,
+} from "../types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -81,6 +88,14 @@ export const loginRequest = async (request: LoginRequest): Promise<AuthSession> 
 
 export const registerRequest = async (request: RegisterRequest) => {
   return postPublicJson("/api/auth/register", request);
+};
+
+export const forgotPasswordRequest = async (email: string) => {
+  return postPublicJson("/api/auth/forgot-password", { email });
+};
+
+export const resetPasswordRequest = async (request: ResetPasswordRequest) => {
+  return postPublicJson("/api/auth/reset-password", request);
 };
 
 export const verifyEmailRequest = async (request: VerifyEmailRequest) => {

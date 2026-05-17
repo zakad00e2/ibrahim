@@ -10,6 +10,7 @@ import { InvoicesPage } from "./pages/InvoicesPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 
 function ProtectedLayout() {
@@ -63,6 +64,7 @@ export function App() {
                 </PublicAuthRoute>
               }
             />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route element={<ProtectedLayout />}>
               <Route index element={<Navigate to="/cashier" replace />} />
               <Route path="/cashier" element={<CashierPage />} />

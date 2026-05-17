@@ -134,6 +134,11 @@ export type VerifyEmailRequest = {
   otp: string;
 };
 
+export type ResetPasswordRequest = {
+  token: string;
+  newPassword: string;
+};
+
 export type AuthUser = {
   id?: string;
   name?: string;
