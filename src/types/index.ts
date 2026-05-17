@@ -7,6 +7,25 @@ export type Product = {
   price: number;
   wholesalePrice: number;
   stock: number;
+  minStock: number;
+  isActive: boolean;
+};
+
+export type StoreInfo = {
+  id?: string;
+  name: string;
+  subdomain?: string;
+  plan?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type DebtPayment = {
+  id: string;
+  amount: number;
+  date: string;
+  notes?: string;
 };
 
 export type Debt = {
@@ -17,6 +36,15 @@ export type Debt = {
   amount: number;
   paid: number;
   remaining: number;
+  isPaid?: boolean;
+  notes?: string;
+  payments?: DebtPayment[];
+};
+
+export type DebtSummary = {
+  totalDebt: number;
+  totalRemaining: number;
+  debts: Debt[];
 };
 
 export type Customer = {
@@ -24,6 +52,7 @@ export type Customer = {
   name: string;
   phone: string;
   debts: Debt[];
+  debtBalance?: number;
 };
 
 export type InvoiceItem = {
@@ -42,6 +71,7 @@ export type Invoice = {
   date: string;
   customerId?: string;
   customerName?: string;
+  notes?: string;
   items: InvoiceItem[];
   total: number;
   paid: number;
@@ -55,6 +85,8 @@ export type ProductInput = {
   price: number;
   wholesalePrice: number;
   stock: number;
+  minStock: number;
+  isActive?: boolean;
 };
 
 export type CustomerInput = {
@@ -72,10 +104,46 @@ export type SaleRequest = {
 
 export type InvoiceUpdateRequest = {
   items: InvoiceItem[];
+  paymentMethod?: PaymentMethod;
+  customerId?: string;
+  paid?: number;
+  notes?: string;
 };
 
 export type ActionResult = {
   ok: boolean;
   message: string;
   id?: string;
+};
+
+export type LoginRequest = {
+  subdomain: string;
+  username: string;
+  password: string;
+};
+
+export type RegisterRequest = {
+  name: string;
+  username: string;
+  email: string;
+  password: string;
+};
+
+export type VerifyEmailRequest = {
+  email: string;
+  otp: string;
+};
+
+export type AuthUser = {
+  id?: string;
+  name?: string;
+  username?: string;
+  email?: string;
+  subdomain?: string;
+};
+
+export type AuthSession = {
+  token?: string;
+  user: AuthUser;
+  raw: unknown;
 };

@@ -1,6 +1,6 @@
 import type { Product } from "../types";
 
-export const mockProducts: Product[] = [
+const productFixtures: Array<Omit<Product, "minStock" | "isActive">> = [
   {
     id: "p-1",
     name: "أرز مصري 1 كجم",
@@ -66,3 +66,9 @@ export const mockProducts: Product[] = [
     stock: 14,
   },
 ];
+
+export const mockProducts: Product[] = productFixtures.map((product) => ({
+  ...product,
+  minStock: 5,
+  isActive: true,
+}));

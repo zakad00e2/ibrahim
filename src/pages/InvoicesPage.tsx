@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Eye, Minus, Pencil, Plus, ReceiptText, Search, Trash2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { AlertCircle, ChevronLeft, ChevronRight, Eye, Minus, Pencil, Plus, ReceiptText, Search, Trash2 } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -16,20 +16,63 @@ const paymentTone = {
 } as const;
 
 export function InvoicesPage() {
-  const { invoices, products, updateInvoice, deleteInvoice } = useAppStore();
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const {
+    invoices,
+    invoicesLoading,
+    invoicesError,
+    invoicesQuery,
+    invoicesTotal,
+    setInvoicesQuery,
+    loadInvoiceDetail,
+    products,
+    updateInvoice,
+    deleteInvoice,
+  } = useAppStore();
+
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [invoiceDetailLoading, setInvoiceDetailLoading] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editItems, setEditItems] = useState<InvoiceItem[]>([]);
   const [editSearch, setEditSearch] = useState("");
   const [editMessage, setEditMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [editLoadingId, setEditLoadingId] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const openEditModal = (invoice: Invoice) => {
-    setEditingInvoice(invoice);
-    setEditItems(invoice.items.map((item) => ({ ...item })));
-    setEditSearch("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const totalPages = Math.max(1, Math.ceil(invoicesTotal / invoicesQuery.limit));
+  const selectedInvoice = useMemo(
+    () => (selectedInvoiceId ? invoices.find((invoice) => invoice.id === selectedInvoiceId) ?? null : null),
+    [invoices, selectedInvoiceId],
+  );
+
+  const openDetails = async (invoice: Invoice) => {
+    setSelectedInvoiceId(invoice.id);
+    setInvoiceDetailLoading(true);
+    await loadInvoiceDetail(invoice.id);
+    setInvoiceDetailLoading(false);
+  };
+
+  const openEditModal = async (invoice: Invoice) => {
+    setEditLoadingId(invoice.id);
     setEditMessage(null);
-    setSelectedInvoice(null);
+
+    const invoiceForEdit =
+      invoice.items.length > 0 ? invoice : await loadInvoiceDetail(invoice.id);
+
+    setEditLoadingId(null);
+
+    if (!invoiceForEdit) {
+      setPageMessage({ type: "error", text: "تعذر تحميل تفاصيل الفاتورة للتعديل" });
+      return;
+    }
+
+    setEditingInvoice(invoiceForEdit);
+    setEditItems(invoiceForEdit.items.map((item) => ({ ...item })));
+    setEditSearch("");
+    setSelectedInvoiceId(null);
   };
 
   const closeEditModal = () => {
@@ -37,6 +80,8 @@ export function InvoicesPage() {
     setEditItems([]);
     setEditSearch("");
     setEditMessage(null);
+    setEditLoadingId(null);
+    setEditSubmitting(false);
   };
 
   const getOriginalQuantity = (productId: string) =>
@@ -47,7 +92,6 @@ export function InvoicesPage() {
 
   const getEditableQuantityLimit = (productId: string) => {
     const product = products.find((item) => item.id === productId);
-
     return (product?.stock ?? 0) + getOriginalQuantity(productId);
   };
 
@@ -55,9 +99,7 @@ export function InvoicesPage() {
     const product = products.find((item) => item.id === productId);
     const originalItem = editingInvoice?.items.find((item) => item.productId === productId);
 
-    if (!product && !originalItem) {
-      return;
-    }
+    if (!product && !originalItem) return;
 
     const rawValue = typeof value === "string" ? normalizeDigits(value) : String(value);
     const parsedQuantity = Number.parseInt(rawValue, 10);
@@ -88,9 +130,7 @@ export function InvoicesPage() {
             }
           : null);
 
-      if (!baseItem) {
-        return current;
-      }
+      if (!baseItem) return current;
 
       const price = baseItem.price || product?.price || 0;
       const wholesalePrice = baseItem.wholesalePrice || product?.wholesalePrice || 0;
@@ -107,7 +147,6 @@ export function InvoicesPage() {
       if (existingItem) {
         return current.map((item) => (item.productId === productId ? nextItem : item));
       }
-
       return [...current, nextItem];
     });
   };
@@ -123,7 +162,6 @@ export function InvoicesPage() {
           (product) => product.name.toLowerCase().includes(term) || product.barcode.includes(term),
         )
       : products;
-
     return visibleProducts.slice(0, 8);
   }, [editSearch, products]);
 
@@ -137,38 +175,49 @@ export function InvoicesPage() {
     : 0;
   const editRemaining = Math.max(editTotal - editPaid, 0);
 
-  const handleSaveInvoiceEdit = () => {
-    if (!editingInvoice) {
-      return;
-    }
+  const handleSaveInvoiceEdit = async () => {
+    if (!editingInvoice || editSubmitting) return;
 
-    const result = updateInvoice(editingInvoice.id, { items: editItems });
-    setEditMessage({ type: result.ok ? "success" : "error", text: result.message });
+    setEditSubmitting(true);
+    try {
+      const result = await updateInvoice(editingInvoice.id, { items: editItems });
 
-    if (result.ok) {
+      if (!result.ok) {
+        setEditMessage({ type: "error", text: result.message });
+        return;
+      }
+
+      setPageMessage({ type: "success", text: result.message });
       closeEditModal();
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
-  const handleDeleteInvoice = (invoice: Invoice) => {
-    const confirmed = window.confirm(`هل تريد حذف الفاتورة ${invoice.number}؟`);
+  const handleDeleteInvoice = useCallback(
+    async (invoice: Invoice) => {
+      const confirmed = window.confirm(`هل تريد حذف الفاتورة ${invoice.number}؟`);
+      if (!confirmed) return;
 
-    if (!confirmed) {
-      return;
-    }
+      setDeletingId(invoice.id);
+      const result = await deleteInvoice(invoice.id);
+      setDeletingId(null);
 
-    const result = deleteInvoice(invoice.id);
-    setPageMessage({ type: result.ok ? "success" : "error", text: result.message });
+      setPageMessage({ type: result.ok ? "success" : "error", text: result.message });
 
-    if (result.ok) {
-      if (selectedInvoice?.id === invoice.id) {
-        setSelectedInvoice(null);
+      if (result.ok) {
+        if (selectedInvoice?.id === invoice.id) setSelectedInvoiceId(null);
+        if (editingInvoice?.id === invoice.id) closeEditModal();
       }
+    },
+    [deleteInvoice, selectedInvoice, editingInvoice],
+  );
 
-      if (editingInvoice?.id === invoice.id) {
-        closeEditModal();
-      }
-    }
+  const handleSearchChange = (value: string) => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setInvoicesQuery({ search: value, page: 1 });
+    }, 350);
   };
 
   return (
@@ -176,7 +225,9 @@ export function InvoicesPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-normal text-zinc-500">عدد الفواتير</p>
-          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl"><AnimatedDigits value={formatNumber(invoices.length)} /></p>
+          <p className="mt-1 text-2xl font-extrabold text-zinc-950 sm:text-3xl">
+            <AnimatedDigits value={formatNumber(invoicesTotal || invoices.length)} />
+          </p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-normal text-zinc-500">إجمالي المبيعات</p>
@@ -204,13 +255,31 @@ export function InvoicesPage() {
       ) : null}
 
       <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-zinc-100 p-4">
-          <ReceiptText className="h-5 w-5 text-brand-600" />
-          <div>
-            <h3 className="text-lg font-extrabold text-zinc-950">الفواتير</h3>
-            <p className="text-sm font-normal text-zinc-500">فواتير تجريبية والفواتير التي تتم من شاشة الكاشير</p>
+        <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-5 w-5 text-brand-600" />
+            <div>
+              <h3 className="text-lg font-extrabold text-zinc-950">الفواتير</h3>
+              <p className="text-sm font-normal text-zinc-500">الفواتير المُسجَّلة على الخادم</p>
+            </div>
           </div>
+          <label className="relative block sm:w-72">
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
+            <input
+              defaultValue=""
+              onChange={(e) => handleSearchChange(normalizeDigits(e.target.value))}
+              placeholder="بحث برقم الفاتورة أو اسم العميل"
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+            />
+          </label>
         </div>
+
+        {invoicesError ? (
+          <div className="flex items-center gap-2 p-4 text-sm text-red-700">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            {invoicesError}
+          </div>
+        ) : null}
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-right text-sm sm:min-w-[980px]">
@@ -227,57 +296,132 @@ export function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {invoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
-                  <td className="px-4 py-3 font-normal text-zinc-600">{formatDate(invoice.date)}</td>
-                  <td className="font-features-normal px-4 py-3 font-medium">{invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}</td>
-                  <td className="px-4 py-3 text-lg font-medium text-brand-700"><AnimatedDigits value={formatCurrency(invoice.total)} /></td>
-                  <td className="px-4 py-3 text-lg font-medium text-emerald-700"><AnimatedDigits value={formatCurrency(invoice.paid)} /></td>
-                  <td className="px-4 py-3 text-lg font-medium text-red-700"><AnimatedDigits value={formatCurrency(invoice.remaining)} /></td>
-                  <td className="px-4 py-3">
-                    <StatusBadge tone={paymentTone[invoice.paymentMethod]} className="!font-normal">
-                      {getPaymentMethodLabel(invoice.paymentMethod)}
-                    </StatusBadge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="secondary" size="sm" icon={<Eye className="h-4 w-4" />} onClick={() => setSelectedInvoice(invoice)}>
-                        التفاصيل
-                      </Button>
-                      <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => openEditModal(invoice)}>
-                        تعديل
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="حذف الفاتورة"
-                        onClick={() => handleDeleteInvoice(invoice)}
-                      >
-                        <Trash2 className="h-5 w-5 text-red-600" />
-                      </Button>
-                    </div>
+              {invoicesLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 animate-pulse rounded bg-zinc-100" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : invoices.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center font-normal text-zinc-500">
+                    لا توجد فواتير
                   </td>
                 </tr>
-              ))}
+              ) : (
+                invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td className="px-4 py-3 font-extrabold text-zinc-950">{invoice.number}</td>
+                    <td className="px-4 py-3 font-normal text-zinc-600">{formatDate(invoice.date)}</td>
+                    <td className="font-features-normal px-4 py-3 font-medium">
+                      {invoice.customerName ? toArabicDigits(invoice.customerName) : "بيع مباشر"}
+                    </td>
+                    <td className="px-4 py-3 text-lg font-medium text-brand-700">
+                      <AnimatedDigits value={formatCurrency(invoice.total)} />
+                    </td>
+                    <td className="px-4 py-3 text-lg font-medium text-emerald-700">
+                      <AnimatedDigits value={formatCurrency(invoice.paid)} />
+                    </td>
+                    <td className="px-4 py-3 text-lg font-medium text-red-700">
+                      <AnimatedDigits value={formatCurrency(invoice.remaining)} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge tone={paymentTone[invoice.paymentMethod]} className="!font-normal">
+                        {getPaymentMethodLabel(invoice.paymentMethod)}
+                      </StatusBadge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="secondary" size="sm" icon={<Eye className="h-4 w-4" />} onClick={() => void openDetails(invoice)}>
+                          التفاصيل
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<Pencil className="h-4 w-4" />}
+                          disabled={editLoadingId === invoice.id}
+                          onClick={() => void openEditModal(invoice)}
+                        >
+                          {editLoadingId === invoice.id ? "جارٍ التحميل..." : "تعديل"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="حذف الفاتورة"
+                          disabled={deletingId === invoice.id}
+                          onClick={() => void handleDeleteInvoice(invoice)}
+                        >
+                          <Trash2 className="h-5 w-5 text-red-600" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 ? (
+          <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3">
+            <p className="text-sm font-normal text-zinc-500">
+              صفحة {toArabicDigits(invoicesQuery.page)} من {toArabicDigits(totalPages)}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="icon"
+                aria-label="الصفحة السابقة"
+                disabled={invoicesQuery.page <= 1 || invoicesLoading}
+                onClick={() => setInvoicesQuery({ page: invoicesQuery.page - 1 })}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                aria-label="الصفحة التالية"
+                disabled={invoicesQuery.page >= totalPages || invoicesLoading}
+                onClick={() => setInvoicesQuery({ page: invoicesQuery.page + 1 })}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
+      {/* Details modal */}
       <Modal
         open={Boolean(selectedInvoice)}
         title={selectedInvoice ? `تفاصيل الفاتورة ${selectedInvoice.number}` : "تفاصيل الفاتورة"}
-        onClose={() => setSelectedInvoice(null)}
+        onClose={() => {
+          setSelectedInvoiceId(null);
+          setInvoiceDetailLoading(false);
+        }}
         size="lg"
         footer={
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {selectedInvoice ? (
-              <Button icon={<Pencil className="h-5 w-5" />} onClick={() => openEditModal(selectedInvoice)}>
-                تعديل الفاتورة
+              <Button
+                icon={<Pencil className="h-5 w-5" />}
+                disabled={editLoadingId === selectedInvoice.id}
+                onClick={() => void openEditModal(selectedInvoice)}
+              >
+                {editLoadingId === selectedInvoice.id ? "جارٍ التحميل..." : "تعديل الفاتورة"}
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={() => setSelectedInvoice(null)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setSelectedInvoiceId(null);
+                setInvoiceDetailLoading(false);
+              }}
+            >
               إغلاق
             </Button>
           </div>
@@ -288,7 +432,9 @@ export function InvoicesPage() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-normal text-zinc-500">العميل</p>
-                <p className="font-features-normal mt-1 font-medium text-zinc-950">{selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}</p>
+                <p className="font-features-normal mt-1 font-medium text-zinc-950">
+                  {selectedInvoice.customerName ? toArabicDigits(selectedInvoice.customerName) : "بيع مباشر"}
+                </p>
               </div>
               <div className="rounded-lg bg-zinc-50 p-4">
                 <p className="text-xs font-normal text-zinc-500">طريقة الدفع</p>
@@ -298,11 +444,15 @@ export function InvoicesPage() {
               </div>
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-xs font-normal text-emerald-700">المدفوع</p>
-                <p className="mt-1 font-extrabold text-emerald-700"><AnimatedDigits value={formatCurrency(selectedInvoice.paid)} /></p>
+                <p className="mt-1 font-extrabold text-emerald-700">
+                  <AnimatedDigits value={formatCurrency(selectedInvoice.paid)} />
+                </p>
               </div>
               <div className="rounded-lg bg-red-50 p-4">
                 <p className="text-xs font-normal text-red-700">المتبقي</p>
-                <p className="mt-1 font-extrabold text-red-700"><AnimatedDigits value={formatCurrency(selectedInvoice.remaining)} /></p>
+                <p className="mt-1 font-extrabold text-red-700">
+                  <AnimatedDigits value={formatCurrency(selectedInvoice.remaining)} />
+                </p>
               </div>
             </div>
 
@@ -317,14 +467,28 @@ export function InvoicesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
-                  {selectedInvoice.items.map((item) => (
-                    <tr key={`${selectedInvoice.id}-${item.productId}`}>
-                      <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
-                      <td className="px-4 py-3 font-semibold"><AnimatedDigits value={formatCurrency(item.price)} /></td>
-                      <td className="px-4 py-3 font-bold"><AnimatedDigits value={formatNumber(item.quantity)} /></td>
-                      <td className="px-4 py-3 font-extrabold text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
+                  {selectedInvoice.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center font-normal text-zinc-500">
+                        {invoiceDetailLoading ? "جارٍ تحميل تفاصيل الفاتورة..." : "لا توجد منتجات في هذه الفاتورة"}
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    selectedInvoice.items.map((item, idx) => (
+                      <tr key={`${selectedInvoice.id}-${item.productId || idx}`}>
+                        <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          <AnimatedDigits value={formatCurrency(item.price)} />
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          <AnimatedDigits value={formatNumber(item.quantity)} />
+                        </td>
+                        <td className="px-4 py-3 font-extrabold text-brand-700">
+                          <AnimatedDigits value={formatCurrency(item.total)} />
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -332,6 +496,7 @@ export function InvoicesPage() {
         ) : null}
       </Modal>
 
+      {/* Edit modal */}
       <Modal
         open={Boolean(editingInvoice)}
         title={editingInvoice ? `تعديل الفاتورة ${editingInvoice.number}` : "تعديل الفاتورة"}
@@ -342,8 +507,12 @@ export function InvoicesPage() {
             <Button variant="secondary" onClick={closeEditModal}>
               إلغاء
             </Button>
-            <Button icon={<Pencil className="h-5 w-5" />} onClick={handleSaveInvoiceEdit}>
-              حفظ التعديل
+            <Button
+              icon={<Pencil className="h-5 w-5" />}
+              disabled={editSubmitting}
+              onClick={() => void handleSaveInvoiceEdit()}
+            >
+              {editSubmitting ? "جارٍ الحفظ..." : "حفظ التعديل"}
             </Button>
           </div>
         }

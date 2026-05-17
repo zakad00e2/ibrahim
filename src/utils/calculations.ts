@@ -17,6 +17,11 @@ export const calculateItemsProfit = (items: InvoiceItem[]) =>
 export const calculateCustomerDebt = (debts: Customer["debts"]) =>
   debts.reduce((sum, debt) => sum + debt.remaining, 0);
 
+export const getCustomerDebtTotal = (customer: Pick<Customer, "debts" | "debtBalance">) => {
+  const calculated = calculateCustomerDebt(customer.debts);
+  return customer.debts.length > 0 ? calculated : (customer.debtBalance ?? calculated);
+};
+
 export const getStockStatus = (stock: number) => {
   if (stock === 0) {
     return { label: "نفد المخزون", tone: "danger" as const };
@@ -44,16 +49,21 @@ export const getTopSellingProducts = (invoices: Invoice[]) => {
 
   invoices.forEach((invoice) => {
     invoice.items.forEach((item) => {
-      const current = byProduct.get(item.productId) ?? {
-        name: item.productName,
+      const productKey = item.productId || item.productName || item.barcode;
+      if (!productKey) return;
+
+      const productName = item.productName || item.barcode || "منتج غير مسمى";
+      const lineTotal = item.total || calculateInvoiceItemTotal(item.price, item.quantity);
+      const current = byProduct.get(productKey) ?? {
+        name: productName,
         quantity: 0,
         total: 0,
       };
 
-      byProduct.set(item.productId, {
-        name: item.productName,
+      byProduct.set(productKey, {
+        name: productName || current.name,
         quantity: current.quantity + item.quantity,
-        total: current.total + item.total,
+        total: current.total + lineTotal,
       });
     });
   });

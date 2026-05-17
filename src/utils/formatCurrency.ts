@@ -10,6 +10,36 @@ export const normalizeDigits = (value: string) =>
     .replace(/٫/g, ".")
     .replace(/٬/g, "");
 
+export const parseLocalizedNumber = (value: string): number | null => {
+  let normalized = normalizeDigits(value)
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[^\d.,-]/g, "");
+
+  if (normalized.includes(",")) {
+    if (normalized.includes(".")) {
+      normalized = normalized.replace(/,/g, "");
+    } else {
+      const commaParts = normalized.split(",");
+
+      normalized =
+        commaParts.length === 2 && commaParts[1].length > 0 && commaParts[1].length <= 2
+          ? `${commaParts[0]}.${commaParts[1]}`
+          : normalized.replace(/,/g, "");
+    }
+  }
+
+  normalized = normalized.replace(/[^\d.-]/g, "");
+
+  if (!normalized || normalized === "." || normalized === "-" || normalized === "-.") {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const formatNumber = (value: number) =>
   toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {
     maximumFractionDigits: 0,

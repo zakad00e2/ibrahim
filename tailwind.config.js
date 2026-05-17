@@ -3,7 +3,7 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ["Thmanyah Sans", "Tajawal", "Cairo", "system-ui", "sans-serif"],
+                sans: ["Cairo", "Tajawal", "system-ui", "sans-serif"],
             },
             colors: {
                 brand: {

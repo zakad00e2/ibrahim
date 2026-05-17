@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { DEFAULT_STORE_NAME, getStoreInfo } from "../services/storeApi";
 import { useAppStore } from "../store/AppStore";
 import type { InvoiceItem, PaymentMethod, Product } from "../types";
 import {
@@ -34,6 +35,7 @@ type ReceiptSnapshot = {
   remaining: number;
   paymentMethod: PaymentMethod;
   customerName: string;
+  storeName: string;
 };
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
@@ -43,7 +45,14 @@ const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
 ];
 
 export function CashierPage() {
-  const { products, customers, addCustomer, completeSale } = useAppStore();
+  const {
+    products,
+    customers,
+    addCustomer,
+    completeSale,
+    findProductByBarcodeRemote,
+    setCustomersQuery,
+  } = useAppStore();
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [barcode, setBarcode] = useState("");
   const [search, setSearch] = useState("");
@@ -53,11 +62,40 @@ export function CashierPage() {
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "", initialDebt: "" });
   const [customerFormError, setCustomerFormError] = useState("");
+  const [customerFormSubmitting, setCustomerFormSubmitting] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
+  const [saleSubmitting, setSaleSubmitting] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<ReceiptSnapshot | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
+  const [storeName, setStoreName] = useState(DEFAULT_STORE_NAME);
+
+  const customerSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let shouldIgnore = false;
+
+    const loadStoreName = async () => {
+      try {
+        const store = await getStoreInfo();
+
+        if (!shouldIgnore) {
+          setStoreName(store.name);
+        }
+      } catch {
+        if (!shouldIgnore) {
+          setStoreName(DEFAULT_STORE_NAME);
+        }
+      }
+    };
+
+    void loadStoreName();
+
+    return () => {
+      shouldIgnore = true;
+    };
+  }, []);
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
@@ -166,23 +204,39 @@ export function CashierPage() {
     setNotice({ type: "success", text: `تمت إضافة ${toArabicDigits(product.name)} إلى الفاتورة` });
   };
 
-  const handleBarcodeEnter = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") {
-      return;
-    }
+  const handleBarcodeEnter = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key !== "Enter") {
+        return;
+      }
 
-    event.preventDefault();
-    const product = findProductByBarcode(products, normalizeDigits(barcode));
+      event.preventDefault();
+      const normalized = normalizeDigits(barcode);
+      const localProduct = findProductByBarcode(products, normalized);
 
-    if (!product) {
-      setNotice({ type: "error", text: "الباركود غير موجود في قائمة المنتجات" });
-      setBarcode("");
-      return;
-    }
+      if (localProduct) {
+        addProductToInvoice(localProduct);
+        setBarcode("");
+        return;
+      }
 
-    addProductToInvoice(product);
-    setBarcode("");
-  };
+      const lookup = async () => {
+        const remoteProduct = await findProductByBarcodeRemote(normalized);
+
+        if (!remoteProduct) {
+          setNotice({ type: "error", text: "لا يوجد منتج نشط بهذا الباركود" });
+        } else {
+          addProductToInvoice(remoteProduct);
+        }
+
+        setBarcode("");
+      };
+
+      void lookup();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [barcode, products, findProductByBarcodeRemote],
+  );
 
   const updateItemQuantity = (productId: string, delta: number) => {
     const product = products.find((item) => item.id === productId);
@@ -274,14 +328,18 @@ export function CashierPage() {
     setCustomerFormError("");
   };
 
-  const handleAddCustomer = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddCustomer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setCustomerFormSubmitting(true);
+    setCustomerFormError("");
 
-    const result = addCustomer({
+    const result = await addCustomer({
       name: customerForm.name,
       phone: customerForm.phone,
-      initialDebt: Number(normalizeDigits(customerForm.initialDebt || "0")),
+      initialDebt: Number(normalizeDigits(customerForm.initialDebt || "0")) || undefined,
     });
+
+    setCustomerFormSubmitting(false);
 
     if (!result.ok) {
       setCustomerFormError(result.message);
@@ -290,30 +348,36 @@ export function CashierPage() {
 
     if (result.id) {
       setSelectedCustomerId(result.id);
+      setCustomerSearch(customerForm.name.trim());
     }
 
-    setCustomerSearch(customerForm.name.trim());
     setNotice({ type: "success", text: "تمت إضافة العميل واختياره للفاتورة" });
     closeCustomerModal();
   };
 
-  const handleCompleteSale = () => {
-    const result = completeSale({
-      items,
-      paymentMethod,
-      customerId: selectedCustomerId || undefined,
-      paidAmount: Number(normalizeDigits(paidAmount || "0")),
-    });
+  const handleCompleteSale = async () => {
+    setSaleSubmitting(true);
 
-    setNotice({ type: result.ok ? "success" : "error", text: result.message });
+    try {
+      const result = await completeSale({
+        items,
+        paymentMethod,
+        customerId: selectedCustomerId || undefined,
+        paidAmount: Number(normalizeDigits(paidAmount || "0")),
+      });
 
-    if (result.ok) {
-      setItems([]);
-      setPaymentMethod("cash");
-      setSelectedCustomerId("");
-      setPaidAmount("");
-      setPrintReceipt(null);
-      barcodeInputRef.current?.focus();
+      setNotice({ type: result.ok ? "success" : "error", text: result.message });
+
+      if (result.ok) {
+        setItems([]);
+        setPaymentMethod("cash");
+        setSelectedCustomerId("");
+        setPaidAmount("");
+        setPrintReceipt(null);
+        barcodeInputRef.current?.focus();
+      }
+    } finally {
+      setSaleSubmitting(false);
     }
   };
 
@@ -348,6 +412,7 @@ export function CashierPage() {
       remaining: Math.max(total - paid, 0),
       paymentMethod,
       customerName: selectedCustomer?.name ?? "بيع مباشر",
+      storeName,
     });
     setPrintRequestId(Date.now());
   };
@@ -580,8 +645,13 @@ export function CashierPage() {
               <input
                 value={toArabicDigits(customerSearch)}
                 onChange={(event) => {
-                  setCustomerSearch(normalizeDigits(event.target.value));
+                  const term = normalizeDigits(event.target.value);
+                  setCustomerSearch(term);
                   setSelectedCustomerId("");
+                  if (customerSearchDebounceRef.current) clearTimeout(customerSearchDebounceRef.current);
+                  customerSearchDebounceRef.current = setTimeout(() => {
+                    setCustomersQuery({ search: term, page: 1, limit: 50 });
+                  }, 300);
                 }}
                 placeholder="ابحث باسم العميل أو رقم الهاتف"
                 className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pr-10 pl-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
@@ -610,8 +680,8 @@ export function CashierPage() {
             </div>
 
             {selectedCustomer ? (
-              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
-                العميل المختار: <span className="font-features-normal">{toArabicDigits(selectedCustomer.name)}</span>
+              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-normal text-emerald-700">
+                العميل المختار: <span className="font-features-normal font-normal">{toArabicDigits(selectedCustomer.name)}</span>
               </p>
             ) : null}
           </div>
@@ -638,7 +708,7 @@ export function CashierPage() {
             variant="secondary"
             className="!font-normal"
             size="md"
-            disabled={items.length === 0}
+            disabled={items.length === 0 || saleSubmitting}
             onClick={handlePrintInvoice}
           >
             طباعة الفاتورة
@@ -648,9 +718,10 @@ export function CashierPage() {
             fullWidth
             className="!font-normal"
             size="md"
-            onClick={handleCompleteSale}
+            disabled={items.length === 0 || saleSubmitting}
+            onClick={() => void handleCompleteSale()}
           >
-            إتمام البيع
+            {saleSubmitting ? "جار إتمام البيع..." : "إتمام البيع"}
             <CheckCircle2 className="h-5 w-5" />
           </Button>
         </div>
@@ -665,13 +736,18 @@ export function CashierPage() {
             <Button variant="secondary" onClick={closeCustomerModal}>
               إلغاء
             </Button>
-            <Button type="submit" form="cashier-customer-form" icon={<UserPlus className="h-5 w-5" />}>
-              إضافة واختيار العميل
+            <Button
+              type="submit"
+              form="cashier-customer-form"
+              icon={<UserPlus className="h-5 w-5" />}
+              disabled={customerFormSubmitting}
+            >
+              {customerFormSubmitting ? "جارٍ الإضافة..." : "إضافة واختيار العميل"}
             </Button>
           </div>
         }
       >
-        <form id="cashier-customer-form" className="grid gap-4" onSubmit={handleAddCustomer}>
+        <form id="cashier-customer-form" className="grid gap-4" onSubmit={(e) => void handleAddCustomer(e)}>
           <label className="block">
             <span className="mb-2 block text-sm font-normal text-zinc-900">اسم العميل</span>
             <input
@@ -730,7 +806,7 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
   return createPortal(
     <section className="print-receipt" dir="rtl" aria-label="فاتورة حالية للطباعة">
       <header className="print-receipt__header">
-        <p className="print-receipt__store">إبراهيم ماركت</p>
+        <p className="print-receipt__store">{toArabicDigits(receipt.storeName)}</p>
         <h1>فاتورة حالية</h1>
       </header>
 
