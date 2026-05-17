@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Eye, Pencil, Plus, ReceiptText, Search, Trash2, UserPlus, WalletCards } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, ReceiptText, Search, Trash2, UserPlus, WalletCards } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -370,14 +370,6 @@ export function CustomersPage() {
                             onClick={() => void openDebtPayment(customer)}
                           >
                             تسديد الدين
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<Eye className="h-4 w-4" />}
-                            onClick={() => void openDetails(customer)}
-                          >
-                            التفاصيل
                           </Button>
                           <Button
                             variant="secondary"

@@ -31,7 +31,7 @@ export function Sidebar() {
     <>
       <aside className="sticky top-0 z-30 flex flex-col border-b border-zinc-200 bg-zinc-950 text-white lg:h-dvh lg:w-60 lg:shrink-0 lg:border-b-0 lg:border-l xl:w-72">
         <div className="flex items-center justify-between px-3 py-3 sm:px-4 sm:py-4 lg:block lg:px-5 lg:py-6 xl:px-6 xl:py-7">
-          <h1 className="sidebar-brand text-xl xl:text-2xl">صافي كاشير</h1>
+          <h1 className="sidebar-brand text-2xl xl:text-3xl">صافي كاشير</h1>
 
           <button
             type="button"
@@ -75,7 +75,7 @@ export function Sidebar() {
 
           <aside className="absolute right-0 top-0 flex h-full w-[min(84vw,20rem)] flex-col bg-zinc-950 text-white shadow-panel">
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
-              <h2 className="sidebar-brand text-xl">صافي كاشير</h2>
+              <h2 className="sidebar-brand text-3xl">صافي كاشير</h2>
               <button
                 type="button"
                 className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 transition hover:bg-white/15"

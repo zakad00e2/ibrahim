@@ -419,8 +419,8 @@ export function CashierPage() {
 
   return (
     <>
-    <div className="print-hidden grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-5 2xl:grid-cols-[minmax(0,1fr)_380px]">
-      <section className="flex flex-col gap-5">
+    <div className="print-hidden grid min-w-0 gap-4 lg:gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="flex min-w-0 flex-col gap-4 lg:gap-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
             امسح الباركود هنا
@@ -444,27 +444,27 @@ export function CashierPage() {
           {notice ? (
             <div
               className={[
-                "mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-normal",
+                "mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-sm font-normal sm:items-center",
                 notice.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700",
               ].join(" ")}
             >
               {notice.type === "success" ? (
-                <CheckCircle2 className="h-5 w-5" />
+                <CheckCircle2 className="h-5 w-5 shrink-0" />
               ) : (
-                <AlertCircle className="h-5 w-5" />
+                <AlertCircle className="h-5 w-5 shrink-0" />
               )}
-              {notice.text}
+              <span className="min-w-0">{notice.text}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="font-features-normal order-3 rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="font-features-normal order-3 min-w-0 rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-lg font-medium text-zinc-950">المنتجات</h3>
               <p className="text-sm font-light text-zinc-500">اضغط على المنتج لإضافته بسرعة</p>
             </div>
-            <label className="relative block lg:w-80">
+            <label className="relative block w-full lg:w-80">
               <Search className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
               <input
                 value={toArabicDigits(search)}
@@ -475,7 +475,7 @@ export function CashierPage() {
             </label>
           </div>
 
-          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 2xl:grid-cols-3">
+          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
             {filteredProducts.map((product) => {
               const status = getStockStatus(product.stock);
 
@@ -485,17 +485,17 @@ export function CashierPage() {
                   type="button"
                   onClick={() => addProductToInvoice(product)}
                   disabled={product.stock === 0}
-                  className="flex min-h-28 flex-col rounded-lg border border-zinc-200 bg-white p-3 text-right transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-60 sm:min-h-32"
+                  className="flex min-h-28 min-w-0 flex-col rounded-lg border border-zinc-200 bg-white p-3 text-right transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-60 sm:min-h-32"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-zinc-950">{toArabicDigits(product.name)}</p>
+                    <div className="min-w-0">
+                      <p className="break-words font-medium text-zinc-950">{toArabicDigits(product.name)}</p>
                     </div>
-                    <StatusBadge className="!font-normal" tone={status.tone} size="sm">{status.label}</StatusBadge>
+                    <StatusBadge className="shrink-0 !font-normal" tone={status.tone} size="sm">{status.label}</StatusBadge>
                   </div>
                   <div className="mt-auto pt-3">
-                    <p className="mb-2 text-xs font-semibold text-zinc-500">{product.barcode}</p>
-                    <div className="flex items-end justify-between gap-3 text-sm font-bold">
+                    <p className="mb-2 break-all text-xs font-semibold text-zinc-500">{product.barcode}</p>
+                    <div className="flex flex-wrap items-end justify-between gap-2 text-sm font-bold">
                       <span className="text-brand-700"><AnimatedDigits value={formatCurrency(product.price)} /></span>
                       <span className="font-normal text-zinc-500">المخزون: <AnimatedDigits value={formatNumber(product.stock)} /></span>
                     </div>
@@ -506,13 +506,85 @@ export function CashierPage() {
           </div>
         </div>
 
-        <div className="order-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div className="order-2 min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-zinc-100 p-4">
             <ReceiptText className="h-5 w-5 text-brand-600" />
             <h3 className="text-lg font-medium text-zinc-950">الفاتورة الحالية</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-right text-sm sm:min-w-[760px]">
+          <div className="grid gap-3 p-3 md:hidden">
+            {items.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm font-normal text-zinc-500">
+                لم تتم إضافة منتجات بعد
+              </div>
+            ) : (
+              items.map((item) => (
+                <article key={item.productId} className="rounded-lg border border-zinc-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="break-words text-sm font-medium text-zinc-950">{toArabicDigits(item.productName)}</h4>
+                      <p className="mt-1 break-all text-xs font-normal text-zinc-500">{item.barcode}</p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="حذف المنتج من الفاتورة"
+                      onClick={() => removeItem(item.productId)}
+                    >
+                      <Trash2 className="h-5 w-5 text-red-600" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg bg-zinc-50 p-2">
+                      <p className="text-xs font-normal text-zinc-500">السعر</p>
+                      <p className="mt-1 font-normal text-zinc-950"><AnimatedDigits value={formatCurrency(item.price)} /></p>
+                    </div>
+                    <div className="rounded-lg bg-brand-50 p-2">
+                      <p className="text-xs font-normal text-brand-700">الإجمالي</p>
+                      <p className="mt-1 font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-normal text-zinc-500">الكمية</span>
+                    <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        className="h-8 w-8 rounded-md"
+                        aria-label="تقليل الكمية"
+                        onClick={() => decreaseQuantity(item.productId)}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </Button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        min="1"
+                        value={toArabicDigits(item.quantity)}
+                        onChange={(event) => setItemQuantity(item.productId, event.target.value)}
+                        aria-label="كتابة الكمية"
+                        className="h-8 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                      />
+                      <Button
+                        size="icon"
+                        variant="secondary"
+                        className="h-8 w-8 rounded-md"
+                        aria-label="زيادة الكمية"
+                        onClick={() => increaseQuantity(item.productId)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[680px] text-right text-sm lg:min-w-0">
               <thead className="bg-zinc-50 text-xs font-normal text-zinc-500">
                 <tr>
                   <th className="px-4 py-3 font-normal">اسم المنتج</th>
@@ -532,7 +604,9 @@ export function CashierPage() {
                 ) : (
                   items.map((item) => (
                     <tr key={item.productId}>
-                      <td className="px-4 py-2 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
+                      <td className="px-4 py-2 font-normal text-zinc-950">
+                        <span className="line-clamp-2 break-words">{toArabicDigits(item.productName)}</span>
+                      </td>
                       <td className="px-4 py-2 text-base font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
                       <td className="px-4 py-2 text-center">
                         <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
@@ -586,34 +660,34 @@ export function CashierPage() {
         </div>
       </section>
 
-      <aside className="h-fit rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-5">
+      <aside className="h-fit min-w-0 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-5">
         <h3 className="text-xl font-medium text-zinc-950">ملخص الفاتورة</h3>
 
         <dl className="mt-5 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <dt className="font-normal text-zinc-500">المجموع الكلي</dt>
-            <dd className="text-xl font-normal text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(total)} /></dd>
+            <dd className="shrink-0 text-left text-xl font-normal text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(total)} /></dd>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <dt className="font-normal text-zinc-500">المبلغ المدفوع</dt>
-            <dd className="font-normal text-emerald-700"><AnimatedDigits value={formatCurrency(effectivePaid || 0)} /></dd>
+            <dd className="shrink-0 text-left font-normal text-emerald-700"><AnimatedDigits value={formatCurrency(effectivePaid || 0)} /></dd>
           </div>
-          <div className="flex items-center justify-between">
-            <dt className="font-normal text-zinc-500">المتبقـــــــــــــي</dt>
-            <dd className="font-normal text-red-700"><AnimatedDigits value={formatCurrency(remaining)} /></dd>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-normal text-zinc-500">المتبقي</dt>
+            <dd className="shrink-0 text-left font-normal text-red-700"><AnimatedDigits value={formatCurrency(remaining)} /></dd>
           </div>
         </dl>
 
         <div className="mt-6">
           <label className="font-features-styled mb-2 block text-sm font-medium text-zinc-900">طريقة الدفع</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2">
             {paymentOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => resetPaymentFields(option.value)}
                 className={[
-                  "font-features-normal rounded-lg border px-2 py-2 text-xs font-normal transition sm:px-3 sm:text-sm",
+                  "font-features-normal min-h-10 rounded-lg border px-2 py-2 text-xs font-normal transition sm:px-3 sm:text-sm",
                   paymentMethod === option.value
                     ? "border-brand-600 bg-brand-50 text-brand-700"
                     : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
@@ -627,12 +701,12 @@ export function CashierPage() {
 
         {paymentMethod === "debt" || paymentMethod === "partial" ? (
           <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="mb-2 flex flex-col items-stretch gap-2 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
               <span className="font-features-styled text-sm font-medium text-zinc-900">اختيار العميل</span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="!font-normal"
+                className="justify-center !font-normal min-[420px]:justify-start"
                 icon={<UserPlus className="h-4 w-4" />}
                 onClick={openCustomerModal}
               >
@@ -668,12 +742,12 @@ export function CashierPage() {
                     type="button"
                     onClick={() => handleSelectCustomer(customer.id)}
                     className={[
-                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-right text-sm transition hover:bg-brand-50",
+                      "flex w-full items-start justify-between gap-3 px-3 py-2 text-right text-sm transition hover:bg-brand-50",
                       selectedCustomerId === customer.id ? "bg-brand-50 text-brand-700" : "text-zinc-800",
                     ].join(" ")}
                   >
-                    <span className="font-features-normal font-normal">{toArabicDigits(customer.name)}</span>
-                    <span className="text-xs font-normal text-zinc-500">{customer.phone || "بدون هاتف"}</span>
+                    <span className="font-features-normal min-w-0 break-words font-normal">{toArabicDigits(customer.name)}</span>
+                    <span className="shrink-0 text-xs font-normal text-zinc-500">{customer.phone || "بدون هاتف"}</span>
                   </button>
                 ))
               )}
@@ -702,7 +776,7 @@ export function CashierPage() {
           </label>
         ) : null}
 
-        <div className="mt-6 grid gap-2">
+        <div className="mt-6 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
           <Button
             fullWidth
             variant="secondary"
