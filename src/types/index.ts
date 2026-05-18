@@ -122,6 +122,11 @@ export type LoginRequest = {
   password: string;
 };
 
+export type SuperAdminLoginRequest = {
+  username: string;
+  password: string;
+};
+
 export type RegisterRequest = {
   name: string;
   username: string;
@@ -145,6 +150,8 @@ export type AuthUser = {
   username?: string;
   email?: string;
   subdomain?: string;
+  role?: string;
+  storeId?: string | null;
 };
 
 export type AuthSession = {

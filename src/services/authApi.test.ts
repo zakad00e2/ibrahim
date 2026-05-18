@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { forgotPasswordRequest, resetPasswordRequest } from "./authApi";
+import { forgotPasswordRequest, resetPasswordRequest, superAdminLoginRequest } from "./authApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -10,6 +10,83 @@ const mockFetch = (response: Response) => {
 describe("authApi", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("logs in a super admin without a store subdomain", async () => {
+    const fetchMock = mockFetch(
+      new Response(
+        JSON.stringify({
+          token: "super-admin-token",
+          userData: {
+            id: "b040893a-a1d1-40c3-8c1b-7bbcde30c514",
+            username: "superadmin",
+            email: "superadmin@safi-pos.com",
+            role: "SUPER_ADMIN",
+            isActive: true,
+            storeId: null,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(
+      superAdminLoginRequest({
+        username: "superadmin",
+        password: "SuperAdmin@123",
+      }),
+    ).resolves.toEqual({
+      token: "super-admin-token",
+      user: {
+        id: "b040893a-a1d1-40c3-8c1b-7bbcde30c514",
+        username: "superadmin",
+        email: "superadmin@safi-pos.com",
+        role: "SUPER_ADMIN",
+        storeId: null,
+      },
+      raw: {
+        token: "super-admin-token",
+        userData: {
+          id: "b040893a-a1d1-40c3-8c1b-7bbcde30c514",
+          username: "superadmin",
+          email: "superadmin@safi-pos.com",
+          role: "SUPER_ADMIN",
+          isActive: true,
+          storeId: null,
+        },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/super-admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "superadmin",
+        password: "SuperAdmin@123",
+      }),
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty("subdomain");
+  });
+
+  it("throws the backend message when super admin login fails", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ message: "بيانات الدخول غير صحيحة أو الحساب معطّل" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      superAdminLoginRequest({
+        username: "superadmin",
+        password: "wrong-password",
+      }),
+    ).rejects.toThrow("بيانات الدخول غير صحيحة أو الحساب معطّل");
   });
 
   it("requests a password reset link by email", async () => {

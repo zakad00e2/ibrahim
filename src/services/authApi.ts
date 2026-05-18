@@ -5,6 +5,7 @@ import type {
   LoginRequest,
   RegisterRequest,
   ResetPasswordRequest,
+  SuperAdminLoginRequest,
   VerifyEmailRequest,
 } from "../types";
 
@@ -55,24 +56,26 @@ const findToken = (payload: unknown): string | undefined => {
   return undefined;
 };
 
-const findUser = (payload: unknown, request: LoginRequest): AuthUser => {
+const findUser = (payload: unknown, fallback: { username: string; subdomain?: string }): AuthUser => {
   if (isRecord(payload)) {
-    const nestedUser = payload.user ?? (isRecord(payload.data) ? payload.data.user : undefined);
+    const nestedUser = payload.user ?? (isRecord(payload.data) ? payload.data.user : undefined) ?? payload.userData;
 
     if (isRecord(nestedUser)) {
       return {
         id: typeof nestedUser.id === "string" ? nestedUser.id : undefined,
         name: typeof nestedUser.name === "string" ? nestedUser.name : undefined,
-        username: typeof nestedUser.username === "string" ? nestedUser.username : request.username,
+        username: typeof nestedUser.username === "string" ? nestedUser.username : fallback.username,
         email: typeof nestedUser.email === "string" ? nestedUser.email : undefined,
-        subdomain: typeof nestedUser.subdomain === "string" ? nestedUser.subdomain : request.subdomain,
+        subdomain: typeof nestedUser.subdomain === "string" ? nestedUser.subdomain : fallback.subdomain,
+        role: typeof nestedUser.role === "string" ? nestedUser.role : undefined,
+        storeId: typeof nestedUser.storeId === "string" || nestedUser.storeId === null ? nestedUser.storeId : undefined,
       };
     }
   }
 
   return {
-    username: request.username,
-    subdomain: request.subdomain,
+    username: fallback.username,
+    subdomain: fallback.subdomain,
   };
 };
 
@@ -82,6 +85,16 @@ export const loginRequest = async (request: LoginRequest): Promise<AuthSession> 
   return {
     token: findToken(payload),
     user: findUser(payload, request),
+    raw: payload,
+  };
+};
+
+export const superAdminLoginRequest = async (request: SuperAdminLoginRequest): Promise<AuthSession> => {
+  const payload = await postPublicJson("/api/auth/super-admin/login", request);
+
+  return {
+    token: findToken(payload),
+    user: findUser(payload, { username: request.username }),
     raw: payload,
   };
 };
