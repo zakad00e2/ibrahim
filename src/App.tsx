@@ -11,6 +11,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { SuperAdminLoginPage } from "./pages/SuperAdminLoginPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 
 function ProtectedLayout() {
@@ -61,6 +62,14 @@ export function App() {
               element={
                 <PublicAuthRoute>
                   <VerifyEmailPage />
+                </PublicAuthRoute>
+              }
+            />
+            <Route
+              path="/super-admin-login"
+              element={
+                <PublicAuthRoute>
+                  <SuperAdminLoginPage />
                 </PublicAuthRoute>
               }
             />
