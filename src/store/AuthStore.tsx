@@ -6,14 +6,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { loginRequest, registerRequest } from "../services/authApi";
-import type { AuthSession, LoginRequest, RegisterRequest } from "../types";
+import { loginRequest, registerRequest, superAdminLoginRequest } from "../services/authApi";
+import type { AuthSession, LoginRequest, RegisterRequest, SuperAdminLoginRequest } from "../types";
 
 type AuthStoreValue = {
   session: AuthSession | null;
   isLoading: boolean;
   error: string | null;
   login: (request: LoginRequest) => Promise<AuthSession>;
+  superAdminLogin: (request: SuperAdminLoginRequest) => Promise<AuthSession>;
   register: (request: RegisterRequest) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -70,6 +71,24 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const superAdminLogin = useCallback(async (request: SuperAdminLoginRequest) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextSession = await superAdminLoginRequest(request);
+      setSession(nextSession);
+      saveSession(nextSession);
+      return nextSession;
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "تعذر تسجيل دخول المشرف العام.";
+      setError(message);
+      throw nextError;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const register = useCallback(async (request: RegisterRequest) => {
     setIsLoading(true);
     setError(null);
@@ -101,11 +120,12 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
       isLoading,
       error,
       login,
+      superAdminLogin,
       register,
       logout,
       clearError,
     }),
-    [clearError, error, isLoading, login, logout, register, session],
+    [clearError, error, isLoading, login, logout, register, session, superAdminLogin],
   );
 
   return <AuthStoreContext.Provider value={value}>{children}</AuthStoreContext.Provider>;
