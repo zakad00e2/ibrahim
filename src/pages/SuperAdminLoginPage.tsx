@@ -8,15 +8,43 @@ type SuperAdminLoginLocationState = {
   from?: Location;
 };
 
-type SuperAdminLoginForm = {
+export type SuperAdminLoginForm = {
   username: string;
   password: string;
 };
+
+const emptyFieldsError = "أدخل اسم المستخدم وكلمة المرور.";
+const errorId = "super-admin-login-error";
 
 const emptyForm: SuperAdminLoginForm = {
   username: "",
   password: "",
 };
+
+export function getSuperAdminLoginRequest(form: SuperAdminLoginForm) {
+  const request = {
+    username: form.username.trim(),
+    password: form.password,
+  };
+
+  return {
+    request,
+    error: request.username && request.password ? null : emptyFieldsError,
+  };
+}
+
+export function getSuperAdminLoginRedirectTo(from?: Location) {
+  if (
+    !from ||
+    from.pathname === "/login" ||
+    from.pathname === "/register" ||
+    from.pathname === "/super-admin-login"
+  ) {
+    return "/cashier";
+  }
+
+  return `${from.pathname}${from.search}${from.hash}`;
+}
 
 export function SuperAdminLoginPage() {
   const navigate = useNavigate();
@@ -31,36 +59,22 @@ export function SuperAdminLoginPage() {
   }, [clearError]);
 
   const redirectTo = useMemo(() => {
-    const from = state?.from;
-
-    if (
-      !from ||
-      from.pathname === "/login" ||
-      from.pathname === "/register" ||
-      from.pathname === "/super-admin-login"
-    ) {
-      return "/cashier";
-    }
-
-    return `${from.pathname}${from.search}${from.hash}`;
+    return getSuperAdminLoginRedirectTo(state?.from);
   }, [state?.from]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextForm = {
-      username: form.username.trim(),
-      password: form.password,
-    };
+    const { request, error: validationError } = getSuperAdminLoginRequest(form);
 
-    if (!nextForm.username || !nextForm.password) {
-      setLocalError("أدخل اسم المستخدم وكلمة المرور.");
+    if (validationError) {
+      setLocalError(validationError);
       return;
     }
 
     setLocalError(null);
 
     try {
-      await superAdminLogin(nextForm);
+      await superAdminLogin(request);
       navigate(redirectTo, { replace: true });
     } catch {
       // The store exposes the API error for display.
@@ -114,7 +128,11 @@ export function SuperAdminLoginPage() {
             </div>
 
             {message ? (
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              <div
+                id={errorId}
+                role="alert"
+                className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+              >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{message}</span>
               </div>
@@ -131,6 +149,8 @@ export function SuperAdminLoginPage() {
                     onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
                     placeholder="username"
                     autoComplete="username"
+                    aria-invalid={message ? true : undefined}
+                    aria-describedby={message ? errorId : undefined}
                     className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-3 pr-10 text-left text-sm font-medium outline-none transition focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
                   />
                 </span>
@@ -147,6 +167,8 @@ export function SuperAdminLoginPage() {
                     onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                     placeholder="••••••••"
                     autoComplete="current-password"
+                    aria-invalid={message ? true : undefined}
+                    aria-describedby={message ? errorId : undefined}
                     className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-3 pr-10 text-left text-sm font-medium outline-none transition focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
                   />
                 </span>
