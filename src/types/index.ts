@@ -159,3 +159,42 @@ export type AuthSession = {
   user: AuthUser;
   raw: unknown;
 };
+
+export type AdminStoreStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" | string;
+
+export type AdminStoreCounts = {
+  users: number;
+  products: number;
+  customers: number;
+};
+
+export type AdminStore = {
+  id: string;
+  name: string;
+  subdomain: string;
+  plan: string;
+  status: AdminStoreStatus;
+  createdAt: string;
+  updatedAt: string;
+  counts: AdminStoreCounts;
+};
+
+export type AdminUserStore = {
+  id: string;
+  name: string;
+  subdomain: string;
+  status: AdminStoreStatus;
+};
+
+export type AdminUser = {
+  id: string;
+  username: string;
+  email?: string;
+  role: string;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  storeId?: string | null;
+  store?: AdminUserStore | null;
+};

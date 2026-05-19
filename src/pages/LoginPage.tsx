@@ -1,13 +1,11 @@
+import { GrainGradient } from "@paper-design/shaders-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertCircle,
-  Boxes,
   CheckCircle2,
   LockKeyhole,
   LogIn,
   Mail,
-  ReceiptText,
-  ScanBarcode,
   Store,
   UserRound,
 } from "lucide-react";
@@ -27,6 +25,8 @@ type LoginForm = {
   username: string;
   password: string;
 };
+
+const supportWhatsappUrl = "https://wa.me/972597986160";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -128,54 +128,48 @@ export function LoginPage() {
 
   return (
     <main className="min-h-dvh bg-[#f7f8f6] px-4 py-6 text-zinc-950 sm:px-6 lg:px-8">
-      <div className="mx-auto grid min-h-[calc(100dvh-3rem)] w-full max-w-6xl items-center gap-8 lg:grid-cols-[1fr_28rem]">
-        <section className="order-2 hidden min-h-[34rem] overflow-hidden rounded-2xl bg-zinc-950 text-white shadow-panel lg:order-1 lg:block relative">
-          <div className="flex h-full flex-col justify-between p-8">
-            <div>
-              <p className="text-sm font-normal text-emerald-400">إدارة متكاملة لمتجرك</p>
-              <h1 className="sidebar-brand mt-4 text-5xl leading-tight mb-2">صافي كاشير</h1>
-            </div>
-
-            <div className="max-w-md">
-              <p className="text-2xl font-medium leading-relaxed text-zinc-300">
+      <div className="mx-auto grid min-h-[calc(100dvh-3rem)] w-full max-w-5xl items-center gap-0 lg:grid-cols-2">
+        <section
+          className="order-2 relative hidden min-h-[34rem] overflow-hidden rounded-2xl bg-emerald-950 text-white shadow-panel lg:order-1 lg:block lg:rounded-l-none lg:rounded-r-2xl"
+        >
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
+            <GrainGradient
+              width={1280}
+              height={720}
+              colors={["#ff4d0069", "#14ff47", "#000000ab"]}
+              colorBack="#04160a"
+              softness={1}
+              intensity={0.18}
+              noise={0}
+              shape="wave"
+              speed={0.6}
+              scale={1.28}
+              rotation={176}
+              offsetY={0.08}
+            />
+          </div>
+          <div className="absolute inset-0 bg-black/20" aria-hidden="true" />
+          <div className="relative z-10 flex min-h-[34rem] items-end justify-start p-8">
+            <div className="flex w-full max-w-lg flex-col items-start text-right" dir="rtl">
+              <h1 className="mb-2 text-3xl font-medium leading-tight">صافي كاشير</h1>
+              <p className="text-base font-normal leading-7">
                 دخول آمن لإدارة البيع، المنتجات، العملاء، والفواتير من مكان واحد.
               </p>
-            </div>
-            
-            <div className="absolute bottom-8 left-8 flex items-center gap-5 text-zinc-300">
-              <div className="flex flex-col items-center gap-2">
-                <span className="grid h-16 w-16 place-items-center">
-                  <ScanBarcode className="h-10 w-10 text-emerald-400" strokeWidth={1.25} />
-                </span>
-              </div>
-              <span className="h-12 w-px bg-white/15" aria-hidden="true" />
-              <div className="flex flex-col items-center gap-2">
-                <span className="grid h-16 w-16 place-items-center">
-                  <Boxes className="h-10 w-10 text-emerald-400" strokeWidth={1.25} />
-                </span>
-              </div>
-              <span className="h-12 w-px bg-white/15" aria-hidden="true" />
-              <div className="flex flex-col items-center gap-2">
-                <span className="grid h-16 w-16 place-items-center">
-                  <ReceiptText className="h-10 w-10 text-emerald-400" strokeWidth={1.25} />
-                </span>
-              </div>
             </div>
           </div>
         </section>
 
         <section className="order-1 lg:order-2">
           <div className="mb-8 lg:hidden">
-            <p className="text-sm font-light text-emerald-600">إدارة متكاملة لمتجرك</p>
-            <h1 className="sidebar-brand mt-2 text-3xl text-zinc-950">صافي كاشير</h1>
+            <h1 className="text-3xl font-medium text-zinc-950">صافي كاشير</h1>
           </div>
 
-          <div className="flex flex-col justify-items-start rounded-2xl border border-zinc-200 bg-white p-5 shadow-panel sm:p-7 lg:min-h-[34rem]">
-            <div className="mb-6">
+          <div className="flex flex-col justify-items-start rounded-2xl lg:rounded-r-none lg:rounded-l-2xl border border-zinc-200 lg:border-r-0 bg-white py-5 px-6 shadow-panel sm:py-7 sm:px-10 lg:px-14 lg:min-h-[34rem]">
+            <div className="mb-6 text-center" style={{ fontFeatureSettings: '"ss01", "cv11"' }}>
               <h2 className="text-2xl font-medium text-zinc-950">
                 {authMode === "login" ? "تسجيل الدخول" : "استعادة كلمة المرور"}
               </h2>
-              <p className="mt-0 text-sm font-normal leading-6 text-zinc-500">
+              <p className="mt-1 text-sm font-normal leading-6 text-zinc-500">
                 {authMode === "login"
                   ? "أدخل بيانات حسابك للوصول إلى لوحة الكاشير."
                   : "أدخل بريد حسابك وسنرسل لك رابط استعادة كلمة المرور."}
@@ -183,8 +177,20 @@ export function LoginPage() {
             </div>
 
             {authMode === "login" && state?.registered ? (
-              <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-                تم إنشاء الحساب بنجاح. سجل الدخول للمتابعة.
+              <div
+                className="mb-4 whitespace-nowrap rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700"
+                dir="rtl"
+              >
+                تم إنشاء الحساب بنجاح. لتفعيل الدخول، يرجى التواصل عبر{" "}
+                <a
+                  className="font-semibold underline decoration-emerald-300 underline-offset-4 transition hover:text-emerald-800"
+                  href={supportWhatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  الواتساب
+                </a>
+                .
               </div>
             ) : null}
 
@@ -211,9 +217,9 @@ export function LoginPage() {
 
             {authMode === "login" ? (
               <>
-                <form className="grid gap-4" onSubmit={handleSubmit}>
+                <form className="grid gap-3" onSubmit={handleSubmit}>
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-zinc-900">اسم المتجر</span>
+                    <span className="mb-1.5 block text-sm font-medium text-zinc-900">اسم المتجر</span>
                     <span className="relative block">
                       <Store className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
                       <input
@@ -228,7 +234,7 @@ export function LoginPage() {
                   </label>
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-zinc-900">اسم المستخدم</span>
+                    <span className="mb-1.5 block text-sm font-medium text-zinc-900">اسم المستخدم</span>
                     <span className="relative block">
                       <UserRound className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
                       <input
@@ -243,7 +249,7 @@ export function LoginPage() {
                   </label>
 
                   <label className="block">
-                    <span className="mb-2 block text-sm font-medium text-zinc-900">كلمة المرور</span>
+                    <span className="mb-1.5 block text-sm font-medium text-zinc-900">كلمة المرور</span>
                     <span className="relative block">
                       <LockKeyhole className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-400" />
                       <input
@@ -261,7 +267,7 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={showForgotPassword}
-                    className="justify-self-end text-sm font-medium text-brand-700 transition hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                    className="justify-self-end text-sm font-normal text-brand-700 transition hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
                   >
                     نسيت كلمة المرور؟
                   </button>

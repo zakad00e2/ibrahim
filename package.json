@@ -10,6 +10,7 @@
     "test": "vitest run --config vitest.config.mjs"
   },
   "dependencies": {
+    "@paper-design/shaders-react": "^0.0.76",
     "@vitejs/plugin-react": "^5.0.4",
     "dexie": "^4.4.2",
     "lucide-react": "^0.468.0",

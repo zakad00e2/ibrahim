@@ -192,7 +192,7 @@ const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { session } = useAuthStore();
-  const isAuthenticated = Boolean(session?.token);
+  const isStoreSession = Boolean(session?.token) && session?.user.role !== "SUPER_ADMIN";
   const [isOffline, setIsOffline] = useState(() => !getBrowserOnlineState());
   const isOfflineRef = useRef(isOffline);
   const syncingOfflineQueueRef = useRef(false);
@@ -271,14 +271,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   productsQueryRef.current = productsQuery;
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isStoreSession) return;
     void fetchProducts(productsQuery);
-  }, [isAuthenticated, productsQuery, fetchProducts]);
+  }, [isStoreSession, productsQuery, fetchProducts]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isStoreSession) return;
     void fetchLowStock();
-  }, [isAuthenticated, fetchLowStock]);
+  }, [isStoreSession, fetchLowStock]);
 
   // ── Customers fetch ──────────────────────────────────────────────────────────
   const hydrateCustomerDebtSummaries = useCallback(async (items: Customer[]): Promise<Customer[]> => {
@@ -350,9 +350,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   customersQueryRef.current = customersQuery;
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isStoreSession) return;
     void fetchCustomers(customersQuery);
-  }, [isAuthenticated, customersQuery, fetchCustomers]);
+  }, [isStoreSession, customersQuery, fetchCustomers]);
 
   // ── Invoices fetch ───────────────────────────────────────────────────────────
   const fetchInvoices = useCallback(async (query: InvoicesQuery) => {
@@ -388,9 +388,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   invoicesQueryRef.current = invoicesQuery;
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isStoreSession) return;
     void fetchInvoices(invoicesQuery);
-  }, [isAuthenticated, invoicesQuery, fetchInvoices]);
+  }, [isStoreSession, invoicesQuery, fetchInvoices]);
 
   // ── Refresh helpers ──────────────────────────────────────────────────────────
   const refreshProducts = useCallback(async () => {
@@ -982,7 +982,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const processOfflineQueue = useCallback(async () => {
-    if (!isAuthenticated || syncingOfflineQueueRef.current || !getBrowserOnlineState()) return;
+    if (!isStoreSession || syncingOfflineQueueRef.current || !getBrowserOnlineState()) return;
 
     syncingOfflineQueueRef.current = true;
     let processedAny = false;
@@ -1025,7 +1025,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [isAuthenticated, refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts]);
+  }, [isStoreSession, refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1047,9 +1047,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [processOfflineQueue]);
 
   useEffect(() => {
-    if (!isAuthenticated || isOffline) return;
+    if (!isStoreSession || isOffline) return;
     void processOfflineQueue();
-  }, [isAuthenticated, isOffline, processOfflineQueue]);
+  }, [isStoreSession, isOffline, processOfflineQueue]);
 
   const value = useMemo<AppStoreValue>(
     () => ({

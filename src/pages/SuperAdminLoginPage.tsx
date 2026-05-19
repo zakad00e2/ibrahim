@@ -40,7 +40,7 @@ export function getSuperAdminLoginRedirectTo(from?: Location) {
     from.pathname === "/register" ||
     from.pathname === "/super-admin-login"
   ) {
-    return "/cashier";
+    return "/super-admin";
   }
 
   return `${from.pathname}${from.search}${from.hash}`;

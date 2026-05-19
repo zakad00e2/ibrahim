@@ -72,11 +72,11 @@ describe("SuperAdminLoginPage", () => {
     ).toBe("أدخل اسم المستخدم وكلمة المرور.");
   });
 
-  it("falls back to cashier for auth entry redirects", () => {
-    expect(getSuperAdminLoginRedirectTo()).toBe("/cashier");
-    expect(getSuperAdminLoginRedirectTo(makeLocation("/login"))).toBe("/cashier");
-    expect(getSuperAdminLoginRedirectTo(makeLocation("/register"))).toBe("/cashier");
-    expect(getSuperAdminLoginRedirectTo(makeLocation("/super-admin-login"))).toBe("/cashier");
+  it("falls back to the super-admin dashboard for auth entry redirects", () => {
+    expect(getSuperAdminLoginRedirectTo()).toBe("/super-admin");
+    expect(getSuperAdminLoginRedirectTo(makeLocation("/login"))).toBe("/super-admin");
+    expect(getSuperAdminLoginRedirectTo(makeLocation("/register"))).toBe("/super-admin");
+    expect(getSuperAdminLoginRedirectTo(makeLocation("/super-admin-login"))).toBe("/super-admin");
   });
 
   it("preserves protected redirect pathname search and hash", () => {
