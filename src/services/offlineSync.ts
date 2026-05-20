@@ -36,6 +36,21 @@ export const getBrowserOnlineState = (): boolean => {
   return navigator.onLine;
 };
 
+export const resolveOfflineCustomerReference = <T extends { customerId?: string }>(
+  payload: T,
+  customerIdReplacements: ReadonlyMap<string, string>,
+): T => {
+  if (!payload.customerId) return payload;
+
+  const resolvedCustomerId = customerIdReplacements.get(payload.customerId);
+  if (!resolvedCustomerId) return payload;
+
+  return {
+    ...payload,
+    customerId: resolvedCustomerId,
+  };
+};
+
 export const buildOfflineInvoice = (
   request: SaleRequest,
   products: Product[],

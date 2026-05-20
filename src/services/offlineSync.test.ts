@@ -7,6 +7,7 @@ import {
   buildOfflineCustomer,
   buildOfflineInvoice,
   isNetworkFailure,
+  resolveOfflineCustomerReference,
 } from "./offlineSync";
 
 const product: Product = {
@@ -123,5 +124,31 @@ describe("offlineSync", () => {
       debtBalance: 35,
       debts: [{ id: "d1", paid: 15, remaining: 35 }],
     });
+  });
+
+  it("replaces offline customer ids in queued sale requests", () => {
+    const request: SaleRequest = {
+      items: [
+        {
+          productId: "p1",
+          productName: "Tea",
+          barcode: "123",
+          price: 10,
+          wholesalePrice: 7,
+          quantity: 1,
+          total: 10,
+        },
+      ],
+      paymentMethod: "debt",
+      customerId: "offline-customer-1",
+    };
+
+    const resolved = resolveOfflineCustomerReference(
+      request,
+      new Map([["offline-customer-1", "server-customer-9"]]),
+    );
+
+    expect(resolved.customerId).toBe("server-customer-9");
+    expect(request.customerId).toBe("offline-customer-1");
   });
 });

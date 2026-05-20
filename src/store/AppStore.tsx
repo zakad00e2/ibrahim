@@ -44,6 +44,8 @@ import {
 } from "../services/debtsApi";
 import {
   cacheCustomerDebts,
+  deleteCachedCustomer,
+  deleteCachedInvoice,
   deleteOfflineOperation,
   getCachedCustomer,
   getCachedDebt,
@@ -55,6 +57,7 @@ import {
   listCachedProducts,
   listOfflineOperations,
   queueOfflineOperation,
+  replaceOfflineCustomerIdInQueuedOperations,
   upsertCachedCustomers,
   upsertCachedDebts,
   upsertCachedInvoices,
@@ -68,6 +71,7 @@ import {
   buildOfflineInvoice,
   getBrowserOnlineState,
   isNetworkFailure,
+  resolveOfflineCustomerReference,
 } from "../services/offlineSync";
 import {
   calculateCustomerDebt,
@@ -191,6 +195,20 @@ const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
   remaining: invoice.remaining,
   isPaid: false,
 });
+
+const isOfflineCustomerId = (id?: string): boolean => id?.startsWith("offline-customer-") ?? false;
+
+const findCachedOfflineCustomerId = async (input: CustomerInput): Promise<string | undefined> => {
+  const cached = await listCachedCustomers({ page: 1, limit: Number.MAX_SAFE_INTEGER });
+  const name = input.name.trim();
+  const phone = input.phone.trim();
+
+  return cached.items.find((customer) =>
+    isOfflineCustomerId(customer.id) &&
+    customer.name === name &&
+    customer.phone === phone
+  )?.id;
+};
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { session } = useAuthStore();
@@ -557,7 +575,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
         const saved = buildOfflineCustomer(input);
-        await queueOfflineOperation({ type: "createCustomer", payload: input });
+        await queueOfflineOperation({ type: "createCustomer", payload: input, localId: saved.id });
         await upsertCachedCustomers([saved]);
         mergeCustomerIntoCurrentPage(saved);
         setCustomersTotal((current) => current + 1);
@@ -809,7 +827,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const nextProducts = applyOfflineSaleToProducts(products, invoice.items);
         let nextCustomers = customers;
 
-        await queueOfflineOperation({ type: "createInvoice", payload: request });
+        await queueOfflineOperation({ type: "createInvoice", payload: request, localId: invoice.id });
         await upsertCachedInvoices([invoice]);
         await upsertCachedProducts(nextProducts);
 
@@ -1022,25 +1040,41 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     try {
       const operations = await listOfflineOperations();
+      const customerIdReplacements = new Map<string, string>();
 
       for (const operation of operations) {
         if (!operation.id) continue;
 
         try {
           switch (operation.type) {
-            case "createInvoice":
-              await apiCreateInvoice(operation.payload);
+            case "createInvoice": {
+              const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
+              const saved = await apiCreateInvoice(payload);
+              await upsertCachedInvoices([saved]);
+              if (operation.localId) await deleteCachedInvoice(operation.localId);
               break;
-            case "createCustomer":
-              await apiCreateCustomer(operation.payload);
+            }
+            case "createCustomer": {
+              const saved = await apiCreateCustomer(operation.payload);
+              await upsertCachedCustomers([saved]);
+              const offlineCustomerId = operation.localId ?? await findCachedOfflineCustomerId(operation.payload);
+
+              if (offlineCustomerId) {
+                customerIdReplacements.set(offlineCustomerId, saved.id);
+                await replaceOfflineCustomerIdInQueuedOperations(offlineCustomerId, saved.id);
+                await deleteCachedCustomer(offlineCustomerId);
+              }
               break;
-            case "payCustomerDebt":
+            }
+            case "payCustomerDebt": {
+              const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
               await payCustomerDebtAuto(
-                operation.payload.customerId,
-                operation.payload.amount,
-                operation.payload.notes,
+                payload.customerId,
+                payload.amount,
+                payload.notes,
               );
               break;
+            }
             case "payDebt":
               await apiPayDebt(operation.payload.debtId, operation.payload.amount, operation.payload.notes);
               break;

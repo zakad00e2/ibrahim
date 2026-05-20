@@ -17,12 +17,14 @@ export type OfflineOperation =
       id?: number;
       type: "createInvoice";
       payload: SaleRequest;
+      localId?: string;
       createdAt: string;
     }
   | {
       id?: number;
       type: "createCustomer";
       payload: CustomerInput;
+      localId?: string;
       createdAt: string;
     }
   | {
@@ -38,9 +40,12 @@ export type OfflineOperation =
       createdAt: string;
     };
 
-export type QueueOfflineOperationInput = Omit<OfflineOperation, "id" | "createdAt"> & {
-  createdAt?: string;
-};
+export type QueueOfflineOperationInput =
+  OfflineOperation extends infer Operation
+    ? Operation extends OfflineOperation
+      ? Omit<Operation, "id" | "createdAt"> & { createdAt?: string }
+      : never
+    : never;
 
 export type OfflineListQuery = {
   search?: string;
@@ -175,6 +180,23 @@ export const getCachedCustomer = async (id: string): Promise<Customer | null> =>
   return customer ?? null;
 };
 
+export const deleteCachedCustomer = async (id: string): Promise<void> => {
+  await offlineDb.transaction("rw", offlineDb.customers, offlineDb.debts, async () => {
+    const customer = await offlineDb.customers.get(id);
+    const debtsByCustomerId = await offlineDb.debts.where("customerId").equals(id).toArray();
+    const debtIds = new Set([
+      ...(customer?.debts.map((debt) => debt.id) ?? []),
+      ...debtsByCustomerId.map((debt) => debt.id),
+    ]);
+
+    if (debtIds.size > 0) {
+      await offlineDb.debts.bulkDelete(Array.from(debtIds));
+    }
+
+    await offlineDb.customers.delete(id);
+  });
+};
+
 export const replaceCachedInvoices = async (items: Invoice[]): Promise<void> => {
   await offlineDb.transaction("rw", offlineDb.invoices, async () => {
     await offlineDb.invoices.clear();
@@ -203,6 +225,10 @@ export const listCachedInvoices = async (
 export const getCachedInvoice = async (id: string): Promise<Invoice | null> => {
   const invoice = await offlineDb.invoices.get(id);
   return invoice ?? null;
+};
+
+export const deleteCachedInvoice = async (id: string): Promise<void> => {
+  await offlineDb.invoices.delete(id);
 };
 
 export const replaceCachedDebts = async (items: CachedDebt[]): Promise<void> => {
@@ -267,4 +293,36 @@ export const listOfflineOperations = async (): Promise<OfflineOperation[]> => {
 
 export const deleteOfflineOperation = async (id: number): Promise<void> => {
   await offlineDb.offlineQueue.delete(id);
+};
+
+export const replaceOfflineCustomerIdInQueuedOperations = async (
+  offlineCustomerId: string,
+  serverCustomerId: string,
+): Promise<void> => {
+  const operations = await offlineDb.offlineQueue.toArray();
+  const updates: OfflineOperation[] = [];
+
+  operations.forEach((operation) => {
+    if (operation.type === "createInvoice" && operation.payload.customerId === offlineCustomerId) {
+      updates.push({
+        ...operation,
+        payload: {
+          ...operation.payload,
+          customerId: serverCustomerId,
+        },
+      });
+    }
+
+    if (operation.type === "payCustomerDebt" && operation.payload.customerId === offlineCustomerId) {
+      updates.push({
+        ...operation,
+        payload: {
+          ...operation.payload,
+          customerId: serverCustomerId,
+        },
+      });
+    }
+  });
+
+  if (updates.length > 0) await offlineDb.offlineQueue.bulkPut(updates);
 };

@@ -1,11 +1,18 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { CustomerInput, Product, SaleRequest } from "../types";
+import type { Customer, CustomerInput, Invoice, Product, SaleRequest } from "../types";
 import {
+  deleteCachedCustomer,
+  deleteCachedInvoice,
+  listCachedCustomers,
+  listCachedInvoices,
   listCachedProducts,
   offlineDb,
   queueOfflineOperation,
+  replaceCachedCustomers,
+  replaceCachedInvoices,
   replaceCachedProducts,
+  replaceOfflineCustomerIdInQueuedOperations,
 } from "./offlineDb";
 
 const makeProduct = (overrides: Partial<Product> = {}): Product => ({
@@ -17,6 +24,40 @@ const makeProduct = (overrides: Partial<Product> = {}): Product => ({
   stock: 4,
   minStock: 1,
   isActive: true,
+  ...overrides,
+});
+
+const makeCustomer = (overrides: Partial<Customer> = {}): Customer => ({
+  id: "offline-customer-1",
+  name: "Ahmed",
+  phone: "011",
+  debtBalance: 25,
+  debts: [
+    {
+      id: "offline-debt-1",
+      invoiceId: "",
+      description: "Opening debt",
+      date: "2026-05-17T10:00:00.000Z",
+      amount: 25,
+      paid: 0,
+      remaining: 25,
+      isPaid: false,
+    },
+  ],
+  ...overrides,
+});
+
+const makeInvoice = (overrides: Partial<Invoice> = {}): Invoice => ({
+  id: "offline-invoice-1",
+  number: "OFFLINE-1",
+  date: "2026-05-17T10:00:00.000Z",
+  customerId: "offline-customer-1",
+  customerName: "Ahmed",
+  items: [],
+  total: 0,
+  paid: 0,
+  remaining: 0,
+  paymentMethod: "cash",
   ...overrides,
 });
 
@@ -83,5 +124,59 @@ describe("offlineDb", () => {
     expect(saved?.type).toBe("createInvoice");
     expect(saved?.payload).toEqual(sale);
     expect(saved?.createdAt).toEqual(expect.any(String));
+  });
+
+  it("replaces offline customer ids inside queued operations", async () => {
+    const invoiceOperationId = await queueOfflineOperation({
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "debt",
+        customerId: "offline-customer-1",
+      },
+    });
+    const paymentOperationId = await queueOfflineOperation({
+      type: "payCustomerDebt",
+      payload: {
+        customerId: "offline-customer-1",
+        amount: 10,
+      },
+    });
+
+    await replaceOfflineCustomerIdInQueuedOperations("offline-customer-1", "server-customer-9");
+
+    const invoiceOperation = await offlineDb.offlineQueue.get(invoiceOperationId);
+    const paymentOperation = await offlineDb.offlineQueue.get(paymentOperationId);
+    expect(invoiceOperation?.type).toBe("createInvoice");
+    expect(paymentOperation?.type).toBe("payCustomerDebt");
+    if (invoiceOperation?.type === "createInvoice") {
+      expect(invoiceOperation.payload.customerId).toBe("server-customer-9");
+    }
+    if (paymentOperation?.type === "payCustomerDebt") {
+      expect(paymentOperation.payload.customerId).toBe("server-customer-9");
+    }
+  });
+
+  it("deletes cached offline customers with their cached debts", async () => {
+    await replaceCachedCustomers([makeCustomer()]);
+
+    await deleteCachedCustomer("offline-customer-1");
+
+    await expect(listCachedCustomers({ page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [],
+      total: 0,
+    });
+    await expect(offlineDb.debts.toArray()).resolves.toEqual([]);
+  });
+
+  it("deletes cached offline invoices", async () => {
+    await replaceCachedInvoices([makeInvoice()]);
+
+    await deleteCachedInvoice("offline-invoice-1");
+
+    await expect(listCachedInvoices({ page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [],
+      total: 0,
+    });
   });
 });
