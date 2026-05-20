@@ -42,6 +42,8 @@ describe("offlineSync", () => {
   it("only treats offline state and fetch-like errors as network failures", () => {
     expect(isNetworkFailure(new Error("server validation failed"), true)).toBe(false);
     expect(isNetworkFailure(new TypeError("Failed to fetch"), true)).toBe(true);
+    expect(isNetworkFailure({ message: "Failed to fetch" }, true)).toBe(true);
+    expect(isNetworkFailure("Failed to fetch", true)).toBe(true);
     expect(isNetworkFailure(new Error("anything"), false)).toBe(true);
   });
 

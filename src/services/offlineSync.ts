@@ -13,12 +13,21 @@ const networkErrorMessages = [
   "network request failed",
 ];
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === "string" ? message : "";
+  }
+  return "";
+};
+
 export const isNetworkFailure = (error: unknown, isOnline = getBrowserOnlineState()): boolean => {
   if (!isOnline) return true;
   if (error instanceof TypeError) return true;
-  if (!(error instanceof Error)) return false;
 
-  const message = error.message.toLowerCase();
+  const message = getErrorMessage(error).toLowerCase();
   return networkErrorMessages.some((knownMessage) => message.includes(knownMessage));
 };
 
