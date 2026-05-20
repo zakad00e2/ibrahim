@@ -63,6 +63,7 @@ import {
 import {
   applyCustomerDebtPayment,
   applyDebtPayment,
+  buildOfflineCustomer,
   applyOfflineSaleToProducts,
   buildOfflineInvoice,
   getBrowserOnlineState,
@@ -553,6 +554,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const addCustomer = useCallback(
     async (input: CustomerInput): Promise<ActionResult> => {
       if (!input.name.trim()) return { ok: false, message: "اسم العميل مطلوب" };
+
+      const persistOfflineCustomer = async (): Promise<ActionResult> => {
+        const saved = buildOfflineCustomer(input);
+        await queueOfflineOperation({ type: "createCustomer", payload: input });
+        await upsertCachedCustomers([saved]);
+        mergeCustomerIntoCurrentPage(saved);
+        setCustomersTotal((current) => current + 1);
+        return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: saved.id };
+      };
+
+      if (isOfflineRef.current || !getBrowserOnlineState()) {
+        setIsOffline(true);
+        return persistOfflineCustomer();
+      }
+
       try {
         const saved = await apiCreateCustomer(input);
         await upsertCachedCustomers([saved]);
@@ -560,6 +576,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         mergeCustomerIntoCurrentPage(saved);
         return { ok: true, message: "تمت إضافة العميل بنجاح", id: saved.id };
       } catch (err) {
+        if (isNetworkFailure(err)) {
+          setIsOffline(true);
+          return persistOfflineCustomer();
+        }
         return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة العميل." };
       }
     },
@@ -1010,6 +1030,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           switch (operation.type) {
             case "createInvoice":
               await apiCreateInvoice(operation.payload);
+              break;
+            case "createCustomer":
+              await apiCreateCustomer(operation.payload);
               break;
             case "payCustomerDebt":
               await payCustomerDebtAuto(

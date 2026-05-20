@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Product, SaleRequest } from "../types";
+import type { CustomerInput, Product, SaleRequest } from "../types";
 import {
   listCachedProducts,
   offlineDb,
@@ -58,6 +58,20 @@ describe("offlineDb", () => {
   });
 
   it("queues write operations with createdAt metadata", async () => {
+    const customer: CustomerInput = {
+      name: "Ahmed",
+      phone: "011",
+    };
+
+    const id = await queueOfflineOperation({ type: "createCustomer", payload: customer });
+    const saved = await offlineDb.offlineQueue.get(id);
+
+    expect(saved?.type).toBe("createCustomer");
+    expect(saved?.payload).toEqual(customer);
+    expect(saved?.createdAt).toEqual(expect.any(String));
+  });
+
+  it("queues offline sale operations with createdAt metadata", async () => {
     const sale: SaleRequest = {
       items: [],
       paymentMethod: "cash",

@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type {
   Customer,
+  CustomerInput,
   Debt,
   Invoice,
   Product,
@@ -16,6 +17,12 @@ export type OfflineOperation =
       id?: number;
       type: "createInvoice";
       payload: SaleRequest;
+      createdAt: string;
+    }
+  | {
+      id?: number;
+      type: "createCustomer";
+      payload: CustomerInput;
       createdAt: string;
     }
   | {

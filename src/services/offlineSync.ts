@@ -1,4 +1,4 @@
-import type { Customer, Invoice, InvoiceItem, Product, SaleRequest } from "../types";
+import type { Customer, CustomerInput, Invoice, InvoiceItem, Product, SaleRequest } from "../types";
 import {
   calculateCustomerDebt,
   calculateInvoiceItemTotal,
@@ -54,6 +54,40 @@ export const buildOfflineInvoice = (
     paid,
     remaining: Math.max(total - paid, 0),
     paymentMethod: request.paymentMethod,
+  };
+};
+
+export const buildOfflineCustomer = (
+  input: CustomerInput,
+  now = new Date(),
+): Customer => {
+  const timestamp = now.getTime();
+  const id = `offline-customer-${timestamp}`;
+  const initialDebt =
+    typeof input.initialDebt === "number" && Number.isFinite(input.initialDebt) && input.initialDebt > 0
+      ? input.initialDebt
+      : 0;
+  const debts = initialDebt > 0
+    ? [
+        {
+          id: `offline-debt-${id}`,
+          invoiceId: "",
+          description: "دين افتتاحي",
+          date: now.toISOString(),
+          amount: initialDebt,
+          paid: 0,
+          remaining: initialDebt,
+          isPaid: false,
+        },
+      ]
+    : [];
+
+  return {
+    id,
+    name: input.name.trim(),
+    phone: input.phone.trim(),
+    debtBalance: initialDebt,
+    debts,
   };
 };
 

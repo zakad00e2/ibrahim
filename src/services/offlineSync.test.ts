@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Customer, Product, SaleRequest } from "../types";
+import type { Customer, CustomerInput, Product, SaleRequest } from "../types";
 import {
   applyCustomerDebtPayment,
   applyDebtPayment,
   applyOfflineSaleToProducts,
+  buildOfflineCustomer,
   buildOfflineInvoice,
   isNetworkFailure,
 } from "./offlineSync";
@@ -72,6 +73,33 @@ describe("offlineSync", () => {
       paid: 5,
       remaining: 15,
       paymentMethod: "partial",
+    });
+  });
+
+  it("builds an offline customer with an opening debt", () => {
+    const input: CustomerInput = {
+      name: "Ahmed",
+      phone: "011",
+      initialDebt: 75,
+    };
+
+    expect(buildOfflineCustomer(input, new Date("2026-05-17T10:00:00.000Z"))).toEqual({
+      id: "offline-customer-1779012000000",
+      name: "Ahmed",
+      phone: "011",
+      debtBalance: 75,
+      debts: [
+        {
+          id: "offline-debt-offline-customer-1779012000000",
+          invoiceId: "",
+          description: "دين افتتاحي",
+          date: "2026-05-17T10:00:00.000Z",
+          amount: 75,
+          paid: 0,
+          remaining: 75,
+          isPaid: false,
+        },
+      ],
     });
   });
 
