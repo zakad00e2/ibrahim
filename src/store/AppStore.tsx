@@ -69,6 +69,7 @@ import {
   buildOfflineCustomer,
   applyOfflineSaleToProducts,
   buildOfflineInvoice,
+  drainOfflineQueue,
   getBrowserOnlineState,
   isNetworkFailure,
   resolveOfflineCustomerReference,
@@ -1036,16 +1037,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (!isStoreSession || syncingOfflineQueueRef.current || !getBrowserOnlineState()) return;
 
     syncingOfflineQueueRef.current = true;
-    let processedAny = false;
 
     try {
-      const operations = await listOfflineOperations();
-      const customerIdReplacements = new Map<string, string>();
-
-      for (const operation of operations) {
-        if (!operation.id) continue;
-
-        try {
+      const result = await drainOfflineQueue({
+        listOperations: listOfflineOperations,
+        deleteOperation: deleteOfflineOperation,
+        processOperation: async (operation, customerIdReplacements) => {
           switch (operation.type) {
             case "createInvoice": {
               const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
@@ -1079,16 +1076,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               await apiPayDebt(operation.payload.debtId, operation.payload.amount, operation.payload.notes);
               break;
           }
+        },
+      });
 
-          await deleteOfflineOperation(operation.id);
-          processedAny = true;
-        } catch (err) {
-          if (isNetworkFailure(err)) setIsOffline(true);
-          break;
-        }
+      if (result.wentOffline) {
+        setIsOffline(true);
+        return;
       }
 
-      if (processedAny && getBrowserOnlineState()) {
+      if (result.processedAny && result.drained && getBrowserOnlineState()) {
         setIsOffline(false);
         await Promise.all([refreshProducts(), refreshCustomers(), refreshInvoices(), refreshLowStock()]);
       }

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Customer, CustomerInput, Product, SaleRequest } from "../types";
+import type { OfflineOperation } from "./offlineDb";
 import {
   applyCustomerDebtPayment,
   applyDebtPayment,
   applyOfflineSaleToProducts,
   buildOfflineCustomer,
   buildOfflineInvoice,
+  drainOfflineQueue,
   isNetworkFailure,
   resolveOfflineCustomerReference,
 } from "./offlineSync";
@@ -150,5 +152,53 @@ describe("offlineSync", () => {
 
     expect(resolved.customerId).toBe("server-customer-9");
     expect(request.customerId).toBe("offline-customer-1");
+  });
+
+  it("does not mark the offline queue as drained when a later operation fails", async () => {
+    const operations: OfflineOperation[] = [
+      {
+        id: 1,
+        type: "createCustomer",
+        payload: {
+          name: "Ahmed",
+          phone: "011",
+        },
+        localId: "offline-customer-1",
+        createdAt: "2026-05-17T10:00:00.000Z",
+      },
+      {
+        id: 2,
+        type: "createInvoice",
+        payload: {
+          items: [],
+          paymentMethod: "cash",
+        },
+        localId: "offline-invoice-1",
+        createdAt: "2026-05-17T10:01:00.000Z",
+      },
+    ];
+    const processed: string[] = [];
+    const deleted: number[] = [];
+
+    const result = await drainOfflineQueue({
+      listOperations: async () => operations,
+      processOperation: async (operation) => {
+        processed.push(operation.type);
+        if (operation.type === "createInvoice") {
+          throw new TypeError("Failed to fetch");
+        }
+      },
+      deleteOperation: async (id) => {
+        deleted.push(id);
+      },
+    });
+
+    expect(result).toMatchObject({
+      processedAny: true,
+      drained: false,
+      wentOffline: true,
+    });
+    expect(processed).toEqual(["createCustomer", "createInvoice"]);
+    expect(deleted).toEqual([1]);
   });
 });

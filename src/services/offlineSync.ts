@@ -1,4 +1,5 @@
 import type { Customer, CustomerInput, Invoice, InvoiceItem, Product, SaleRequest } from "../types";
+import type { OfflineOperation } from "./offlineDb";
 import {
   calculateCustomerDebt,
   calculateInvoiceItemTotal,
@@ -34,6 +35,59 @@ export const isNetworkFailure = (error: unknown, isOnline = getBrowserOnlineStat
 export const getBrowserOnlineState = (): boolean => {
   if (typeof navigator === "undefined") return true;
   return navigator.onLine;
+};
+
+export type OfflineQueueDrainResult = {
+  processedAny: boolean;
+  drained: boolean;
+  wentOffline: boolean;
+  failedOperation?: OfflineOperation;
+  error?: unknown;
+};
+
+export type OfflineQueueDrainOptions = {
+  listOperations: () => Promise<OfflineOperation[]>;
+  processOperation: (
+    operation: OfflineOperation,
+    customerIdReplacements: Map<string, string>,
+  ) => Promise<void>;
+  deleteOperation: (id: number) => Promise<void>;
+  isNetworkError?: (error: unknown) => boolean;
+};
+
+export const drainOfflineQueue = async ({
+  listOperations,
+  processOperation,
+  deleteOperation,
+  isNetworkError = isNetworkFailure,
+}: OfflineQueueDrainOptions): Promise<OfflineQueueDrainResult> => {
+  const operations = await listOperations();
+  const customerIdReplacements = new Map<string, string>();
+  let processedAny = false;
+
+  for (const operation of operations) {
+    if (!operation.id) continue;
+
+    try {
+      await processOperation(operation, customerIdReplacements);
+      await deleteOperation(operation.id);
+      processedAny = true;
+    } catch (error) {
+      return {
+        processedAny,
+        drained: false,
+        wentOffline: isNetworkError(error),
+        failedOperation: operation,
+        error,
+      };
+    }
+  }
+
+  return {
+    processedAny,
+    drained: true,
+    wentOffline: false,
+  };
 };
 
 export const resolveOfflineCustomerReference = <T extends { customerId?: string }>(
