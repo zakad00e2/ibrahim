@@ -18,6 +18,10 @@ const translateApiMessage = (message: string): string => {
     return "يوجد منتج بهذا الباركود بالفعل في متجرك";
   }
 
+  if (normalized === "invalid credentials") {
+    return "اسم المستخدم أو كلمة المرور غير صحيحة.";
+  }
+
   return message;
 };
 

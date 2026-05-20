@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { loginRequest, registerRequest, superAdminLoginRequest } from "../services/authApi";
-import type { AuthSession, LoginRequest, RegisterRequest, SuperAdminLoginRequest } from "../types";
+import type { AuthSession, AuthUser, LoginRequest, RegisterRequest, SuperAdminLoginRequest } from "../types";
 
 type AuthStoreValue = {
   session: AuthSession | null;
@@ -24,6 +24,42 @@ const storageKey = "ibrahim-market-auth-session";
 
 const AuthStoreContext = createContext<AuthStoreValue | null>(null);
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const normalizeStoredUser = (value: unknown): AuthUser | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const storeId = value.storeId;
+
+  return {
+    id: typeof value.id === "string" ? value.id : undefined,
+    name: typeof value.name === "string" ? value.name : undefined,
+    username: typeof value.username === "string" ? value.username : undefined,
+    email: typeof value.email === "string" ? value.email : undefined,
+    subdomain: typeof value.subdomain === "string" ? value.subdomain : undefined,
+    role: typeof value.role === "string" ? value.role : undefined,
+    storeId: typeof storeId === "string" || storeId === null ? storeId : undefined,
+  };
+};
+
+export const normalizeStoredSession = (value: unknown): AuthSession | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const token = typeof value.token === "string" ? value.token.trim() : "";
+  const user = normalizeStoredUser(value.user);
+
+  if (!token || !user) {
+    return null;
+  }
+
+  return { token, user };
+};
+
 const loadStoredSession = (): AuthSession | null => {
   try {
     const stored = window.localStorage.getItem(storageKey);
@@ -32,16 +68,20 @@ const loadStoredSession = (): AuthSession | null => {
       return null;
     }
 
-    const parsed = JSON.parse(stored) as AuthSession;
-
-    return parsed && typeof parsed === "object" && parsed.user ? parsed : null;
+    return normalizeStoredSession(JSON.parse(stored) as unknown);
   } catch {
     return null;
   }
 };
 
 const saveSession = (session: AuthSession) => {
-  window.localStorage.setItem(storageKey, JSON.stringify(session));
+  const normalized = normalizeStoredSession(session);
+
+  if (normalized) {
+    window.localStorage.setItem(storageKey, JSON.stringify(normalized));
+  } else {
+    clearSession();
+  }
 };
 
 const clearSession = () => {

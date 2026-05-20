@@ -1,4 +1,6 @@
-import type { Customer, Invoice, InvoiceItem, PaymentMethod, Product } from "../types";
+import type { Customer, Debt, Invoice, InvoiceItem, PaymentMethod, Product } from "../types";
+
+export type DebtPaymentValidationError = "missing-debt" | "invalid-amount" | "amount-exceeds-remaining";
 
 export const calculateInvoiceItemTotal = (price: number, quantity: number) => price * quantity;
 
@@ -20,6 +22,21 @@ export const calculateCustomerDebt = (debts: Customer["debts"]) =>
 export const getCustomerDebtTotal = (customer: Pick<Customer, "debts" | "debtBalance">) => {
   const calculated = calculateCustomerDebt(customer.debts);
   return customer.debts.length > 0 ? calculated : (customer.debtBalance ?? calculated);
+};
+
+export const validateDebtPaymentAmount = (
+  debt: Pick<Debt, "remaining"> | null | undefined,
+  amount: number,
+): DebtPaymentValidationError | null => {
+  if (!debt) {
+    return "missing-debt";
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "invalid-amount";
+  }
+
+  return amount > debt.remaining ? "amount-exceeds-remaining" : null;
 };
 
 export const getStockStatus = (stock: number) => {

@@ -85,7 +85,6 @@ export const loginRequest = async (request: LoginRequest): Promise<AuthSession> 
   return {
     token: findToken(payload),
     user: findUser(payload, request),
-    raw: payload,
   };
 };
 
@@ -95,7 +94,6 @@ export const superAdminLoginRequest = async (request: SuperAdminLoginRequest): P
   return {
     token: findToken(payload),
     user: findUser(payload, { username: request.username }),
-    raw: payload,
   };
 };
 

@@ -157,7 +157,6 @@ export type AuthUser = {
 export type AuthSession = {
   token?: string;
   user: AuthUser;
-  raw: unknown;
 };
 
 export type AdminStoreStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" | string;

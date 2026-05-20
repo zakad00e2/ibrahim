@@ -267,16 +267,18 @@ export function LoginPage() {
                   <button
                     type="button"
                     onClick={showForgotPassword}
-                    className="justify-self-end text-sm font-normal text-brand-700 transition hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+                    className="justify-self-end text-sm font-normal text-zinc-900 transition hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2"
                   >
                     نسيت كلمة المرور؟
                   </button>
 
                   <Button
                     type="submit"
+                    variant="dark"
                     fullWidth
                     disabled={isLoading}
                     icon={<LogIn className="h-5 w-5" />}
+                    iconPosition="end"
                     className="mt-2"
                   >
                     {isLoading ? "جار تسجيل الدخول..." : "دخول"}
@@ -285,7 +287,7 @@ export function LoginPage() {
 
                 <p className="mt-5 text-center text-sm font-normal text-zinc-500">
                   لا تملك حسابًا؟{" "}
-                  <Link className="font-medium text-brand-700 transition hover:text-brand-600" to="/register">
+                  <Link className="font-medium text-zinc-900 transition hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2" to="/register">
                     إنشاء حساب جديد
                   </Link>
                 </p>

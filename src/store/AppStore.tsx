@@ -73,6 +73,7 @@ import {
   calculateInvoiceItemTotal,
   calculateItemsTotal,
   getCustomerDebtTotal,
+  validateDebtPaymentAmount,
 } from "../utils/calculations";
 import type {
   ActionResult,
@@ -659,12 +660,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const payDebt = useCallback(
     async (debtId: string, amount: number, notes?: string): Promise<ActionResult> => {
-      if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "أدخل مبلغ صحيح" };
       const customerWithDebt = customers.find((customer) => customer.debts.some((debt) => debt.id === debtId));
+      const targetDebt = customerWithDebt?.debts.find((debt) => debt.id === debtId);
+      const validationError = validateDebtPaymentAmount(targetDebt, amount);
+
+      if (validationError === "missing-debt") {
+        return { ok: false, message: "الدين غير موجود في البيانات المحفوظة" };
+      }
+
+      if (validationError === "invalid-amount") {
+        return { ok: false, message: "أدخل مبلغ صحيح" };
+      }
+
+      if (validationError === "amount-exceeds-remaining") {
+        return { ok: false, message: "مبلغ الدفعة أكبر من المتبقي على الدين" };
+      }
+
       const optimisticCustomers = applyDebtPayment(customers, debtId, amount);
 
       if (isOfflineRef.current || !getBrowserOnlineState()) {
-        if (!customerWithDebt) return { ok: false, message: "الدين غير موجود في البيانات المحفوظة" };
         await queueOfflineOperation({ type: "payDebt", payload: { debtId, amount, notes } });
         setCustomers(optimisticCustomers);
         await upsertCachedCustomers(optimisticCustomers);
@@ -687,7 +701,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
-          if (!customerWithDebt) return { ok: false, message: "الدين غير موجود في البيانات المحفوظة" };
           await queueOfflineOperation({ type: "payDebt", payload: { debtId, amount, notes } });
           setCustomers(optimisticCustomers);
           await upsertCachedCustomers(optimisticCustomers);

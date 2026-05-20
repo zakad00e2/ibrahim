@@ -1,12 +1,14 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "success";
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "success" | "dark";
+
 type ButtonSize = "sm" | "md" | "icon";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   icon?: ReactNode;
+  iconPosition?: "start" | "end";
   fullWidth?: boolean;
 };
 
@@ -16,6 +18,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   danger: "bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500",
   ghost: "text-zinc-700 hover:bg-zinc-100 focus-visible:ring-zinc-400",
   success: "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500",
+  dark: "bg-zinc-950 text-white hover:bg-zinc-800 focus-visible:ring-zinc-950",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -28,6 +31,7 @@ export function Button({
   variant = "primary",
   size = "md",
   icon,
+  iconPosition = "start",
   fullWidth,
   className = "",
   children,
@@ -46,8 +50,9 @@ export function Button({
       ].join(" ")}
       {...props}
     >
-      {icon}
+      {iconPosition === "start" && icon}
       {children}
+      {iconPosition === "end" && icon}
     </button>
   );
 }

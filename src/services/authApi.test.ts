@@ -33,12 +33,12 @@ describe("authApi", () => {
       ),
     );
 
-    await expect(
-      superAdminLoginRequest({
-        username: "superadmin",
-        password: "SuperAdmin@123",
-      }),
-    ).resolves.toEqual({
+    const session = await superAdminLoginRequest({
+      username: "superadmin",
+      password: "SuperAdmin@123",
+    });
+
+    expect(session).toEqual({
       token: "super-admin-token",
       user: {
         id: "b040893a-a1d1-40c3-8c1b-7bbcde30c514",
@@ -47,18 +47,8 @@ describe("authApi", () => {
         role: "SUPER_ADMIN",
         storeId: null,
       },
-      raw: {
-        token: "super-admin-token",
-        userData: {
-          id: "b040893a-a1d1-40c3-8c1b-7bbcde30c514",
-          username: "superadmin",
-          email: "superadmin@safi-pos.com",
-          role: "SUPER_ADMIN",
-          isActive: true,
-          storeId: null,
-        },
-      },
     });
+    expect(session).not.toHaveProperty("raw");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/super-admin/login", {
       method: "POST",
@@ -87,6 +77,22 @@ describe("authApi", () => {
         password: "wrong-password",
       }),
     ).rejects.toThrow("بيانات الدخول غير صحيحة أو الحساب معطّل");
+  });
+
+  it("translates invalid credentials into a specific Arabic login error", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ message: "Invalid credentials" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      superAdminLoginRequest({
+        username: "superadmin",
+        password: "wrong-password",
+      }),
+    ).rejects.toThrow("اسم المستخدم أو كلمة المرور غير صحيحة.");
   });
 
   it("requests a password reset link by email", async () => {

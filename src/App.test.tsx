@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getAuthenticatedHomePath, normalizeLeadingSlashPathname } from "./App";
+import {
+  getAuthenticatedHomePath,
+  isAuthenticatedSession,
+  isSuperAdminSession,
+  normalizeLeadingSlashPathname,
+} from "./App";
+import type { AuthSession } from "./types";
 
 describe("App routing", () => {
   it("normalizes duplicate leading slashes before route matching redirects to login", () => {
@@ -20,7 +26,6 @@ describe("App routing", () => {
           role: "SUPER_ADMIN",
           storeId: null,
         },
-        raw: null,
       }),
     ).toBe("/super-admin");
   });
@@ -33,8 +38,20 @@ describe("App routing", () => {
           role: "ADMIN",
           storeId: "95f2dd54-c1d0-41c1-a1d3-58e93cd544b2",
         },
-        raw: null,
       }),
     ).toBe("/cashier");
+  });
+
+  it("does not authenticate role-only sessions without a bearer token", () => {
+    const forgedSession: AuthSession = {
+      user: {
+        role: "SUPER_ADMIN",
+        storeId: null,
+      },
+    };
+
+    expect(isAuthenticatedSession(forgedSession)).toBe(false);
+    expect(isSuperAdminSession(forgedSession)).toBe(false);
+    expect(getAuthenticatedHomePath(forgedSession)).toBe("/login");
   });
 });

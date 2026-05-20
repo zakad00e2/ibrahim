@@ -183,9 +183,11 @@ export function RegisterPage() {
 
               <Button
                 type="submit"
+                variant="dark"
                 fullWidth
                 disabled={isLoading}
                 icon={<UserPlus className="h-5 w-5" />}
+                iconPosition="end"
                 className="mt-2"
               >
                 {isLoading ? "جار إنشاء الحساب..." : "إنشاء الحساب"}
@@ -194,7 +196,7 @@ export function RegisterPage() {
 
             <p className="mt-5 text-center text-sm font-normal text-zinc-500">
               لديك حساب بالفعل؟{" "}
-              <Link className="font-medium text-brand-700 transition hover:text-brand-600" to="/login">
+              <Link className="font-medium text-zinc-900 transition hover:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-2" to="/login">
                 تسجيل الدخول
               </Link>
             </p>

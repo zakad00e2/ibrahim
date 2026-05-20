@@ -32,27 +32,6 @@ export default defineConfig({
                 maximumFileSizeToCacheInBytes: 10485760, // 10 MB
                 globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
                 navigateFallback: "/index.html",
-                runtimeCaching: [
-                    {
-                        urlPattern: function (_a) {
-                            var url = _a.url;
-                            return url.pathname.startsWith("/api/") ||
-                                url.href.startsWith("".concat(apiTarget, "/api/"));
-                        },
-                        handler: "NetworkFirst",
-                        options: {
-                            cacheName: "cashier-api-cache",
-                            networkTimeoutSeconds: 5,
-                            expiration: {
-                                maxEntries: 200,
-                                maxAgeSeconds: 60 * 60 * 24,
-                            },
-                            cacheableResponse: {
-                                statuses: [0, 200],
-                            },
-                        },
-                    },
-                ],
             },
         }),
     ],

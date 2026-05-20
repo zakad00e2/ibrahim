@@ -18,11 +18,14 @@ import type { AuthSession } from "./types";
 
 export const normalizeLeadingSlashPathname = (pathname: string) => pathname.replace(/^\/{2,}/, "/");
 
+export const isAuthenticatedSession = (session: AuthSession | null): boolean =>
+  typeof session?.token === "string" && session.token.trim() !== "";
+
 export const isSuperAdminSession = (session: AuthSession | null): boolean =>
-  session?.user.role === "SUPER_ADMIN";
+  isAuthenticatedSession(session) && session?.user.role === "SUPER_ADMIN";
 
 export const getAuthenticatedHomePath = (session: AuthSession | null): string =>
-  isSuperAdminSession(session) ? "/super-admin" : "/cashier";
+  !isAuthenticatedSession(session) ? "/login" : isSuperAdminSession(session) ? "/super-admin" : "/cashier";
 
 function ProtectedLayout() {
   const location = useLocation();
@@ -33,7 +36,7 @@ function ProtectedLayout() {
     return <Navigate to={`${normalizedPathname}${location.search}${location.hash}`} replace />;
   }
 
-  if (!session) {
+  if (!isAuthenticatedSession(session)) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
@@ -48,7 +51,7 @@ function SuperAdminRoute({ children }: { children: ReactElement }) {
   const location = useLocation();
   const { session } = useAuthStore();
 
-  if (!session) {
+  if (!isAuthenticatedSession(session)) {
     return <Navigate to="/super-admin-login" replace state={{ from: location }} />;
   }
 
@@ -62,7 +65,7 @@ function SuperAdminRoute({ children }: { children: ReactElement }) {
 function PublicAuthRoute({ children }: { children: ReactElement }) {
   const { session } = useAuthStore();
 
-  if (session) {
+  if (isAuthenticatedSession(session)) {
     return <Navigate to={getAuthenticatedHomePath(session)} replace />;
   }
 
