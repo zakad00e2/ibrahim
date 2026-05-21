@@ -96,7 +96,12 @@ const handleResponse = async (response: Response, fallback: string): Promise<unk
   const payload = await readJson(response);
 
   if (!response.ok) {
-    const err = new Error(normalizeMessage(payload, fallback)) as Error & { unauthorized?: boolean };
+    const err = new Error(normalizeMessage(payload, fallback)) as Error & {
+      statusCode?: number;
+      unauthorized?: boolean;
+    };
+
+    err.statusCode = response.status;
 
     if (response.status === 401) {
       err.unauthorized = true;

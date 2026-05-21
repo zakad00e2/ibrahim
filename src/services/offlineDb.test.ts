@@ -7,6 +7,7 @@ import {
   listCachedCustomers,
   listCachedInvoices,
   listCachedProducts,
+  hasOfflineOperations,
   offlineDb,
   queueOfflineOperation,
   replaceCachedCustomers,
@@ -98,6 +99,24 @@ describe("offlineDb", () => {
     });
   });
 
+  it("keeps cached products isolated by store", async () => {
+    await replaceCachedProducts("store-a", [
+      makeProduct({ id: "shared-product", name: "Tea", barcode: "123" }),
+    ]);
+    await replaceCachedProducts("store-b", [
+      makeProduct({ id: "shared-product", name: "Sugar", barcode: "456" }),
+    ]);
+
+    await expect(listCachedProducts("store-a", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeProduct({ id: "shared-product", name: "Tea", barcode: "123" })],
+      total: 1,
+    });
+    await expect(listCachedProducts("store-b", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeProduct({ id: "shared-product", name: "Sugar", barcode: "456" })],
+      total: 1,
+    });
+  });
+
   it("queues write operations with createdAt metadata", async () => {
     const customer: CustomerInput = {
       name: "Ahmed",
@@ -124,6 +143,33 @@ describe("offlineDb", () => {
     expect(saved?.type).toBe("createInvoice");
     expect(saved?.payload).toEqual(sale);
     expect(saved?.createdAt).toEqual(expect.any(String));
+  });
+
+  it("reports whether queued offline operations are pending", async () => {
+    await expect(hasOfflineOperations()).resolves.toBe(false);
+
+    await queueOfflineOperation({
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "cash",
+      },
+    });
+
+    await expect(hasOfflineOperations()).resolves.toBe(true);
+  });
+
+  it("reports pending offline operations for the current store only", async () => {
+    await queueOfflineOperation("store-a", {
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "cash",
+      },
+    });
+
+    await expect(hasOfflineOperations("store-a")).resolves.toBe(true);
+    await expect(hasOfflineOperations("store-b")).resolves.toBe(false);
   });
 
   it("replaces offline customer ids inside queued operations", async () => {

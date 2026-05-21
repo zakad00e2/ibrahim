@@ -56,6 +56,13 @@ const productFromResponse = (payload: unknown): Product =>
 const valuesMatch = (actual: number, expected: number): boolean =>
   Math.abs(actual - expected) < 0.005;
 
+const DUPLICATE_BARCODE_MESSAGE = "يوجد منتج بهذا الباركود بالفعل في متجرك";
+
+const isHttpNotFound = (error: unknown): boolean =>
+  error instanceof Error &&
+  "statusCode" in error &&
+  (error as Error & { statusCode?: number }).statusCode === 404;
+
 const assertWholesalePriceSaved = async (
   product: Product,
   expectedWholesalePrice: number | undefined,
@@ -185,7 +192,7 @@ export const getLowStockProducts = async (): Promise<Product[]> => {
 export const getProductByBarcode = async (barcode: string): Promise<Product> => {
   const payload = await getJson(`/api/products/barcode/${encodeURIComponent(barcode)}`);
 
-  return mapProduct(payload);
+  return productFromResponse(payload);
 };
 
 export const getProductById = async (id: string): Promise<Product> => {
@@ -194,7 +201,26 @@ export const getProductById = async (id: string): Promise<Product> => {
   return mapProduct(isRecord(payload) && isRecord(payload.product) ? payload.product : payload);
 };
 
+const assertBarcodeAvailable = async (barcode: string, currentProductId?: string): Promise<void> => {
+  const normalizedBarcode = barcode.trim();
+
+  if (!normalizedBarcode) return;
+
+  try {
+    const existingProduct = await getProductByBarcode(normalizedBarcode);
+
+    if (!currentProductId || existingProduct.id !== currentProductId) {
+      throw new Error(DUPLICATE_BARCODE_MESSAGE);
+    }
+  } catch (error) {
+    if (isHttpNotFound(error)) return;
+    throw error;
+  }
+};
+
 export const createProduct = async (input: ProductInput): Promise<Product> => {
+  await assertBarcodeAvailable(input.barcode);
+
   const payload = await postJson("/api/products", {
     name: input.name.trim(),
     barcode: input.barcode.trim(),
@@ -209,6 +235,10 @@ export const createProduct = async (input: ProductInput): Promise<Product> => {
 };
 
 export const updateProduct = async (id: string, input: Partial<ProductInput> & { isActive?: boolean }): Promise<Product> => {
+  if (input.barcode !== undefined) {
+    await assertBarcodeAvailable(input.barcode, id);
+  }
+
   const payload = await patchJson(`/api/products/${encodeURIComponent(id)}`, {
     ...input,
     name: input.name?.trim(),

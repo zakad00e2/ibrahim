@@ -10,6 +10,7 @@ import {
   drainOfflineQueue,
   isNetworkFailure,
   resolveOfflineCustomerReference,
+  shouldReadFromOfflineCache,
 } from "./offlineSync";
 
 const product: Product = {
@@ -48,6 +49,12 @@ describe("offlineSync", () => {
     expect(isNetworkFailure({ message: "Failed to fetch" }, true)).toBe(true);
     expect(isNetworkFailure("Failed to fetch", true)).toBe(true);
     expect(isNetworkFailure(new Error("anything"), false)).toBe(true);
+  });
+
+  it("prefers cached reads while offline writes are still queued", () => {
+    expect(shouldReadFromOfflineCache(true, true)).toBe(true);
+    expect(shouldReadFromOfflineCache(true, false)).toBe(false);
+    expect(shouldReadFromOfflineCache(false, false)).toBe(true);
   });
 
   it("builds an offline invoice with totals and local customer naming", () => {

@@ -51,6 +51,7 @@ import {
   getCachedDebt,
   getCachedInvoice,
   getCachedProductByBarcode,
+  hasOfflineOperations,
   listCachedCustomerDebts,
   listCachedCustomers,
   listCachedInvoices,
@@ -73,6 +74,7 @@ import {
   getBrowserOnlineState,
   isNetworkFailure,
   resolveOfflineCustomerReference,
+  shouldReadFromOfflineCache,
 } from "../services/offlineSync";
 import {
   calculateCustomerDebt,
@@ -83,6 +85,7 @@ import {
 } from "../utils/calculations";
 import type {
   ActionResult,
+  AuthSession,
   Customer,
   CustomerInput,
   Debt,
@@ -180,6 +183,17 @@ const DEFAULT_INVOICES_QUERY: InvoicesQuery = {
 
 const OFFLINE_WRITE_MESSAGE = "تم حفظ العملية بدون إنترنت وسيتم إرسالها تلقائياً عند عودة الاتصال";
 
+const getSessionStoreCacheKey = (session: AuthSession | null): string | null => {
+  if (!session?.token || session.user.role === "SUPER_ADMIN") return null;
+
+  if (session.user.storeId) return `store:${session.user.storeId}`;
+  if (session.user.subdomain) return `subdomain:${session.user.subdomain}`;
+  if (session.user.id) return `user:${session.user.id}`;
+  if (session.user.username) return `username:${session.user.username}`;
+
+  return null;
+};
+
 const toDebtSummary = (debts: Debt[]): DebtSummary => ({
   totalDebt: debts.reduce((sum, debt) => sum + debt.amount, 0),
   totalRemaining: debts.reduce((sum, debt) => sum + debt.remaining, 0),
@@ -213,7 +227,8 @@ const findCachedOfflineCustomerId = async (input: CustomerInput): Promise<string
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { session } = useAuthStore();
-  const isStoreSession = Boolean(session?.token) && session?.user.role !== "SUPER_ADMIN";
+  const storeCacheKey = useMemo(() => getSessionStoreCacheKey(session), [session]);
+  const isStoreSession = storeCacheKey !== null;
   const [isOffline, setIsOffline] = useState(() => !getBrowserOnlineState());
   const isOfflineRef = useRef(isOffline);
   const syncingOfflineQueueRef = useRef(false);
@@ -242,11 +257,43 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [invoicesQuery, setInvoicesQueryState] = useState<InvoicesQuery>(DEFAULT_INVOICES_QUERY);
   const [invoicesTotal, setInvoicesTotal] = useState(0);
 
+  useEffect(() => {
+    setProducts([]);
+    setProductsLoading(false);
+    setProductsError(null);
+    setProductsTotal(0);
+    setLowStockCount(0);
+    setCustomers([]);
+    setCustomersLoading(false);
+    setCustomersError(null);
+    setCustomersTotal(0);
+    setInvoices([]);
+    setInvoicesLoading(false);
+    setInvoicesError(null);
+    setInvoicesTotal(0);
+  }, [storeCacheKey]);
+
   // ── Products fetch ───────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async (query: ProductsQuery) => {
+    if (!storeCacheKey) {
+      setProducts([]);
+      setProductsTotal(0);
+      return;
+    }
+
     setProductsLoading(true);
     setProductsError(null);
     try {
+      const isOnline = getBrowserOnlineState();
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+        if (!isOnline) setIsOffline(true);
+        const cached = await listCachedProducts(storeCacheKey, query);
+        setProducts(cached.items);
+        setProductsTotal(cached.total);
+        return;
+      }
+
       const params: ListProductsParams = {
         page: query.page,
         limit: query.limit,
@@ -254,13 +301,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (query.search.trim()) params.search = query.search.trim();
       if (query.isActive !== undefined) params.isActive = query.isActive;
       const result: ProductsListResult = await listProducts(params);
-      await upsertCachedProducts(result.items);
+      await upsertCachedProducts(storeCacheKey, result.items);
       setProducts(result.items);
       setProductsTotal(result.total);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        const cached = await listCachedProducts(query);
+        const cached = await listCachedProducts(storeCacheKey, query);
         setProducts(cached.items);
         setProductsTotal(cached.total);
         setProductsError(null);
@@ -271,22 +318,35 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setProductsLoading(false);
     }
-  }, []);
+  }, [storeCacheKey]);
 
   const fetchLowStock = useCallback(async () => {
+    if (!storeCacheKey) {
+      setLowStockCount(0);
+      return;
+    }
+
     try {
+      const isOnline = getBrowserOnlineState();
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+        const cached = await listCachedProducts(storeCacheKey, { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
+        setLowStockCount(cached.items.filter((product) => product.stock <= product.minStock).length);
+        return;
+      }
+
       const items = await getLowStockProducts();
-      await upsertCachedProducts(items);
+      await upsertCachedProducts(storeCacheKey, items);
       setLowStockCount(items.length);
     } catch {
       try {
-        const cached = await listCachedProducts({ isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
+        const cached = await listCachedProducts(storeCacheKey, { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
         setLowStockCount(cached.items.filter((product) => product.stock <= product.minStock).length);
       } catch {
         // non-critical, silent fail
       }
     }
-  }, []);
+  }, [storeCacheKey]);
 
   const productsQueryRef = useRef(productsQuery);
   productsQueryRef.current = productsQuery;
@@ -338,9 +398,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchCustomers = useCallback(async (query: CustomersQuery) => {
+    if (!storeCacheKey) {
+      setCustomers([]);
+      setCustomersTotal(0);
+      return;
+    }
+
     setCustomersLoading(true);
     setCustomersError(null);
     try {
+      const isOnline = getBrowserOnlineState();
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+        if (!isOnline) setIsOffline(true);
+        const cached = await listCachedCustomers(query);
+        setCustomers(cached.items);
+        setCustomersTotal(cached.total);
+        return;
+      }
+
       const params: ListCustomersParams = {
         page: query.page,
         limit: query.limit,
@@ -365,7 +441,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setCustomersLoading(false);
     }
-  }, [hydrateCustomerDebtSummaries]);
+  }, [hydrateCustomerDebtSummaries, storeCacheKey]);
 
   const customersQueryRef = useRef(customersQuery);
   customersQueryRef.current = customersQuery;
@@ -377,9 +453,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   // ── Invoices fetch ───────────────────────────────────────────────────────────
   const fetchInvoices = useCallback(async (query: InvoicesQuery) => {
+    if (!storeCacheKey) {
+      setInvoices([]);
+      setInvoicesTotal(0);
+      return;
+    }
+
     setInvoicesLoading(true);
     setInvoicesError(null);
     try {
+      const isOnline = getBrowserOnlineState();
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+        if (!isOnline) setIsOffline(true);
+        const cached = await listCachedInvoices(query);
+        setInvoices(cached.items);
+        setInvoicesTotal(cached.total);
+        return;
+      }
+
       const params: ListInvoicesParams = {
         page: query.page,
         limit: query.limit,
@@ -403,7 +495,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setInvoicesLoading(false);
     }
-  }, []);
+  }, [storeCacheKey]);
 
   const invoicesQueryRef = useRef(invoicesQuery);
   invoicesQueryRef.current = invoicesQuery;
@@ -454,9 +546,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const addProduct = useCallback(
     async (input: ProductInput): Promise<ActionResult> => {
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       try {
         const saved = await apiCreateProduct(input);
-        await upsertCachedProducts([saved]);
+        await upsertCachedProducts(storeCacheKey, [saved]);
         await fetchProducts(productsQueryRef.current);
         mergeProductIntoCurrentPage(saved);
         void fetchLowStock();
@@ -465,14 +559,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة المنتج." };
       }
     },
-    [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage],
+    [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage, storeCacheKey],
   );
 
   const updateProduct = useCallback(
     async (id: string, input: ProductInput): Promise<ActionResult> => {
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       try {
         const saved = await apiUpdateProduct(id, input);
-        await upsertCachedProducts([saved]);
+        await upsertCachedProducts(storeCacheKey, [saved]);
         await fetchProducts(productsQueryRef.current);
         mergeProductIntoCurrentPage(saved);
         void fetchLowStock();
@@ -481,7 +577,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تعديل المنتج." };
       }
     },
-    [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage],
+    [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage, storeCacheKey],
   );
 
   const deleteProduct = useCallback(
@@ -494,18 +590,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const findProductByBarcodeRemote = useCallback(async (barcode: string): Promise<Product | null> => {
+    if (!storeCacheKey) return null;
+
     try {
       const product = await getProductByBarcode(barcode);
-      await upsertCachedProducts([product]);
+      await upsertCachedProducts(storeCacheKey, [product]);
       return product;
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        return getCachedProductByBarcode(barcode);
+        return getCachedProductByBarcode(storeCacheKey, barcode);
       }
       return null;
     }
-  }, []);
+  }, [storeCacheKey]);
 
   // ── Customer detail loader ───────────────────────────────────────────────────
   const loadCustomerDetail = useCallback(async (id: string): Promise<void> => {
@@ -574,9 +672,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     async (input: CustomerInput): Promise<ActionResult> => {
       if (!input.name.trim()) return { ok: false, message: "اسم العميل مطلوب" };
 
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
         const saved = buildOfflineCustomer(input);
-        await queueOfflineOperation({ type: "createCustomer", payload: input, localId: saved.id });
+        await queueOfflineOperation(storeCacheKey, { type: "createCustomer", payload: input, localId: saved.id });
         await upsertCachedCustomers([saved]);
         mergeCustomerIntoCurrentPage(saved);
         setCustomersTotal((current) => current + 1);
@@ -602,7 +702,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة العميل." };
       }
     },
-    [fetchCustomers, mergeCustomerIntoCurrentPage],
+    [fetchCustomers, mergeCustomerIntoCurrentPage, storeCacheKey],
   );
 
   const updateCustomer = useCallback(
@@ -646,6 +746,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const payCustomerDebt = useCallback(
     async (customerId: string, amount: number, notes?: string): Promise<ActionResult> => {
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       const customer = customers.find((c) => c.id === customerId);
       if (!customer) return { ok: false, message: "العميل غير موجود" };
       if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "أدخل مبلغ تسديد صحيح" };
@@ -655,7 +757,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const optimisticCustomers = applyCustomerDebtPayment(customers, customerId, amount);
 
       if (isOfflineRef.current || !getBrowserOnlineState()) {
-        await queueOfflineOperation({ type: "payCustomerDebt", payload: { customerId, amount, notes } });
+        await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
         setCustomers(optimisticCustomers);
         await upsertCachedCustomers(optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE };
@@ -675,7 +777,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
-          await queueOfflineOperation({ type: "payCustomerDebt", payload: { customerId, amount, notes } });
+          await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
           await upsertCachedCustomers(optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE };
         }
@@ -694,11 +796,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل التسديد." };
       }
     },
-    [customers],
+    [customers, storeCacheKey],
   );
 
   const payDebt = useCallback(
     async (debtId: string, amount: number, notes?: string): Promise<ActionResult> => {
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       const customerWithDebt = customers.find((customer) => customer.debts.some((debt) => debt.id === debtId));
       const targetDebt = customerWithDebt?.debts.find((debt) => debt.id === debtId);
       const validationError = validateDebtPaymentAmount(targetDebt, amount);
@@ -718,7 +822,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const optimisticCustomers = applyDebtPayment(customers, debtId, amount);
 
       if (isOfflineRef.current || !getBrowserOnlineState()) {
-        await queueOfflineOperation({ type: "payDebt", payload: { debtId, amount, notes } });
+        await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
         setCustomers(optimisticCustomers);
         await upsertCachedCustomers(optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
@@ -740,7 +844,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
-          await queueOfflineOperation({ type: "payDebt", payload: { debtId, amount, notes } });
+          await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
           setCustomers(optimisticCustomers);
           await upsertCachedCustomers(optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
@@ -748,7 +852,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل الدفعة." };
       }
     },
-    [customers],
+    [customers, storeCacheKey],
   );
 
   const loadDebtDetail = useCallback(async (debtId: string): Promise<Debt | null> => {
@@ -796,6 +900,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   // ── Sale ─────────────────────────────────────────────────────────────────────
   const completeSale = useCallback(
     async (request: SaleRequest): Promise<ActionResult> => {
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
+
       if (request.items.length === 0) return { ok: false, message: "لا يمكن إتمام بيع بدون منتجات" };
 
       const total = calculateItemsTotal(request.items);
@@ -828,9 +934,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const nextProducts = applyOfflineSaleToProducts(products, invoice.items);
         let nextCustomers = customers;
 
-        await queueOfflineOperation({ type: "createInvoice", payload: request, localId: invoice.id });
+        await queueOfflineOperation(storeCacheKey, { type: "createInvoice", payload: request, localId: invoice.id });
         await upsertCachedInvoices([invoice]);
-        await upsertCachedProducts(nextProducts);
+        await upsertCachedProducts(storeCacheKey, nextProducts);
 
         if (invoice.remaining > 0 && customer) {
           const offlineDebt = createOfflineDebtFromInvoice(invoice);
@@ -895,7 +1001,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setInvoicesTotal((current) => current + 1);
       setProducts(nextProducts);
       await upsertCachedInvoices([invoice]);
-      await upsertCachedProducts(nextProducts);
+      await upsertCachedProducts(storeCacheKey, nextProducts);
 
       const remaining = total - paid;
       if (remaining > 0 && customer) {
@@ -906,7 +1012,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       void refreshInvoices();
       return { ok: true, message: "تم إتمام البيع بنجاح" };
     },
-    [customers, products, refreshProducts, refreshCustomers, refreshInvoices],
+    [customers, products, refreshProducts, refreshCustomers, refreshInvoices, storeCacheKey],
   );
 
   // ── Invoice mutations ────────────────────────────────────────────────────────
@@ -1034,13 +1140,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const processOfflineQueue = useCallback(async () => {
-    if (!isStoreSession || syncingOfflineQueueRef.current || !getBrowserOnlineState()) return;
+    if (!storeCacheKey || syncingOfflineQueueRef.current || !getBrowserOnlineState()) return;
 
     syncingOfflineQueueRef.current = true;
 
     try {
       const result = await drainOfflineQueue({
-        listOperations: listOfflineOperations,
+        listOperations: () => listOfflineOperations(storeCacheKey),
         deleteOperation: deleteOfflineOperation,
         processOperation: async (operation, customerIdReplacements) => {
           switch (operation.type) {
@@ -1058,7 +1164,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
               if (offlineCustomerId) {
                 customerIdReplacements.set(offlineCustomerId, saved.id);
-                await replaceOfflineCustomerIdInQueuedOperations(offlineCustomerId, saved.id);
+                await replaceOfflineCustomerIdInQueuedOperations(storeCacheKey, offlineCustomerId, saved.id);
                 await deleteCachedCustomer(offlineCustomerId);
               }
               break;
@@ -1091,7 +1197,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [isStoreSession, refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts]);
+  }, [refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts, storeCacheKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

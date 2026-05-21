@@ -37,6 +37,11 @@ export const getBrowserOnlineState = (): boolean => {
   return navigator.onLine;
 };
 
+export const shouldReadFromOfflineCache = (
+  isOnline: boolean,
+  hasPendingOfflineOperations: boolean,
+): boolean => !isOnline || hasPendingOfflineOperations;
+
 export type OfflineQueueDrainResult = {
   processedAny: boolean;
   drained: boolean;
