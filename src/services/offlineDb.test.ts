@@ -117,6 +117,24 @@ describe("offlineDb", () => {
     });
   });
 
+  it("keeps cached customers isolated by store", async () => {
+    await replaceCachedCustomers("store-a", [
+      makeCustomer({ id: "shared-customer", name: "Online Store Customer", phone: "010" }),
+    ]);
+    await replaceCachedCustomers("store-b", [
+      makeCustomer({ id: "shared-customer", name: "Other Store Customer", phone: "011" }),
+    ]);
+
+    await expect(listCachedCustomers("store-a", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeCustomer({ id: "shared-customer", name: "Online Store Customer", phone: "010" })],
+      total: 1,
+    });
+    await expect(listCachedCustomers("store-b", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeCustomer({ id: "shared-customer", name: "Other Store Customer", phone: "011" })],
+      total: 1,
+    });
+  });
+
   it("queues write operations with createdAt metadata", async () => {
     const customer: CustomerInput = {
       name: "Ahmed",
@@ -213,6 +231,24 @@ describe("offlineDb", () => {
       total: 0,
     });
     await expect(offlineDb.debts.toArray()).resolves.toEqual([]);
+  });
+
+  it("keeps cached invoices isolated by store", async () => {
+    await replaceCachedInvoices("store-a", [
+      makeInvoice({ id: "shared-invoice", number: "A-1", customerName: "Store A Customer" }),
+    ]);
+    await replaceCachedInvoices("store-b", [
+      makeInvoice({ id: "shared-invoice", number: "B-1", customerName: "Store B Customer" }),
+    ]);
+
+    await expect(listCachedInvoices("store-a", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeInvoice({ id: "shared-invoice", number: "A-1", customerName: "Store A Customer" })],
+      total: 1,
+    });
+    await expect(listCachedInvoices("store-b", { page: 1, limit: 20 })).resolves.toMatchObject({
+      items: [makeInvoice({ id: "shared-invoice", number: "B-1", customerName: "Store B Customer" })],
+      total: 1,
+    });
   });
 
   it("deletes cached offline invoices", async () => {

@@ -213,8 +213,8 @@ const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
 
 const isOfflineCustomerId = (id?: string): boolean => id?.startsWith("offline-customer-") ?? false;
 
-const findCachedOfflineCustomerId = async (input: CustomerInput): Promise<string | undefined> => {
-  const cached = await listCachedCustomers({ page: 1, limit: Number.MAX_SAFE_INTEGER });
+const findCachedOfflineCustomerId = async (storeCacheKey: string, input: CustomerInput): Promise<string | undefined> => {
+  const cached = await listCachedCustomers(storeCacheKey, { page: 1, limit: Number.MAX_SAFE_INTEGER });
   const name = input.name.trim();
   const phone = input.phone.trim();
 
@@ -363,6 +363,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   // ── Customers fetch ──────────────────────────────────────────────────────────
   const hydrateCustomerDebtSummaries = useCallback(async (items: Customer[]): Promise<Customer[]> => {
+    if (!storeCacheKey) return items;
+
     const missingSummaries = items.filter(
       (customer) => customer.debtBalance === undefined && customer.debts.length === 0,
     );
@@ -372,12 +374,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       missingSummaries.map(async (customer) => {
         try {
           const summary = await getCustomerDebts(customer.id);
-          await cacheCustomerDebts(customer.id, summary.debts, summary.totalRemaining);
+          await cacheCustomerDebts(storeCacheKey, customer.id, summary.debts, summary.totalRemaining);
           return { customerId: customer.id, summary };
         } catch (err) {
           if (!isNetworkFailure(err)) throw err;
           setIsOffline(true);
-          const debts = await listCachedCustomerDebts(customer.id);
+          const debts = await listCachedCustomerDebts(storeCacheKey, customer.id);
           return { customerId: customer.id, summary: toDebtSummary(debts) };
         }
       }),
@@ -395,7 +397,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const summary = summariesByCustomerId.get(customer.id);
       return summary ? { ...customer, debts: summary.debts, debtBalance: summary.totalRemaining } : customer;
     });
-  }, []);
+  }, [storeCacheKey]);
 
   const fetchCustomers = useCallback(async (query: CustomersQuery) => {
     if (!storeCacheKey) {
@@ -411,7 +413,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
-        const cached = await listCachedCustomers(query);
+        const cached = await listCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         return;
@@ -424,13 +426,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (query.search.trim()) params.search = query.search.trim();
       const result: CustomersListResult = await listCustomers(params);
       const items = await hydrateCustomerDebtSummaries(result.items);
-      await upsertCachedCustomers(items);
+      await upsertCachedCustomers(storeCacheKey, items);
       setCustomers(items);
       setCustomersTotal(result.total);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        const cached = await listCachedCustomers(query);
+        const cached = await listCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         setCustomersError(null);
@@ -466,7 +468,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
-        const cached = await listCachedInvoices(query);
+        const cached = await listCachedInvoices(storeCacheKey, query);
         setInvoices(cached.items);
         setInvoicesTotal(cached.total);
         return;
@@ -478,13 +480,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       };
       if (query.search.trim()) params.search = query.search.trim();
       const result: InvoicesListResult = await listInvoices(params);
-      await upsertCachedInvoices(result.items);
+      await upsertCachedInvoices(storeCacheKey, result.items);
       setInvoices(result.items);
       setInvoicesTotal(result.total);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        const cached = await listCachedInvoices(query);
+        const cached = await listCachedInvoices(storeCacheKey, query);
         setInvoices(cached.items);
         setInvoicesTotal(cached.total);
         setInvoicesError(null);
@@ -607,26 +609,28 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   // ── Customer detail loader ───────────────────────────────────────────────────
   const loadCustomerDetail = useCallback(async (id: string): Promise<void> => {
+    if (!storeCacheKey) return;
+
     let rich: Customer | null = null;
     let debtSummary: DebtSummary | null = null;
 
     try {
       rich = await getCustomerById(id);
-      await upsertCachedCustomers([rich]);
+      await upsertCachedCustomers(storeCacheKey, [rich]);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        rich = await getCachedCustomer(id);
+        rich = await getCachedCustomer(storeCacheKey, id);
       }
     }
 
     try {
       debtSummary = await getCustomerDebts(id);
-      await cacheCustomerDebts(id, debtSummary.debts, debtSummary.totalRemaining);
+      await cacheCustomerDebts(storeCacheKey, id, debtSummary.debts, debtSummary.totalRemaining);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        debtSummary = toDebtSummary(await listCachedCustomerDebts(id));
+        debtSummary = toDebtSummary(await listCachedCustomerDebts(storeCacheKey, id));
       }
     }
 
@@ -645,7 +649,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ...base, debts, debtBalance };
       });
     });
-  }, []);
+  }, [storeCacheKey]);
 
   // ── Merge a saved customer into the current page list ────────────────────────
   const mergeCustomerIntoCurrentPage = useCallback((saved: Customer) => {
@@ -677,7 +681,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
         const saved = buildOfflineCustomer(input);
         await queueOfflineOperation(storeCacheKey, { type: "createCustomer", payload: input, localId: saved.id });
-        await upsertCachedCustomers([saved]);
+        await upsertCachedCustomers(storeCacheKey, [saved]);
         mergeCustomerIntoCurrentPage(saved);
         setCustomersTotal((current) => current + 1);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: saved.id };
@@ -690,7 +694,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       try {
         const saved = await apiCreateCustomer(input);
-        await upsertCachedCustomers([saved]);
+        await upsertCachedCustomers(storeCacheKey, [saved]);
         await fetchCustomers(customersQueryRef.current);
         mergeCustomerIntoCurrentPage(saved);
         return { ok: true, message: "تمت إضافة العميل بنجاح", id: saved.id };
@@ -708,9 +712,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const updateCustomer = useCallback(
     async (id: string, input: CustomerInput): Promise<ActionResult> => {
       if (!input.name.trim()) return { ok: false, message: "اسم العميل مطلوب" };
+      if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
       try {
         const saved = await apiUpdateCustomer(id, input);
-        await upsertCachedCustomers([saved]);
+        await upsertCachedCustomers(storeCacheKey, [saved]);
         setCustomers((current) =>
           current.map((c) =>
             c.id === id
@@ -728,7 +733,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تعديل العميل." };
       }
     },
-    [],
+    [storeCacheKey],
   );
 
   const deleteCustomer = useCallback(
@@ -759,7 +764,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (isOfflineRef.current || !getBrowserOnlineState()) {
         await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
         setCustomers(optimisticCustomers);
-        await upsertCachedCustomers(optimisticCustomers);
+        await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE };
       }
 
@@ -767,7 +772,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       try {
         const summary = await payCustomerDebtAuto(customerId, amount, notes);
-        await cacheCustomerDebts(customerId, summary.debts, summary.totalRemaining);
+        await cacheCustomerDebts(storeCacheKey, customerId, summary.debts, summary.totalRemaining);
         setCustomers((current) =>
           current.map((c) =>
             c.id === customerId ? { ...c, debts: summary.debts, debtBalance: summary.totalRemaining } : c,
@@ -778,14 +783,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
           await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
-          await upsertCachedCustomers(optimisticCustomers);
+          await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE };
         }
 
         // Rollback optimistic update by reloading fresh debt data
         getCustomerDebts(customerId)
           .then((summary) => {
-            void cacheCustomerDebts(customerId, summary.debts, summary.totalRemaining);
+            void cacheCustomerDebts(storeCacheKey, customerId, summary.debts, summary.totalRemaining);
             setCustomers((current) =>
               current.map((c) =>
                 c.id === customerId ? { ...c, debts: summary.debts, debtBalance: summary.totalRemaining } : c,
@@ -824,13 +829,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (isOfflineRef.current || !getBrowserOnlineState()) {
         await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
         setCustomers(optimisticCustomers);
-        await upsertCachedCustomers(optimisticCustomers);
+        await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
       }
 
       try {
         const updatedDebt = await apiPayDebt(debtId, amount, notes);
-        await upsertCachedDebts([{ ...updatedDebt, customerId: customerWithDebt?.id }]);
+        await upsertCachedDebts(storeCacheKey, [{ ...updatedDebt, customerId: customerWithDebt?.id }]);
         if (customerWithDebt) {
           const nextCustomers = customers.map((c) => {
             if (!c.debts.some((d) => d.id === debtId)) return c;
@@ -838,7 +843,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             return { ...c, debts, debtBalance: calculateCustomerDebt(debts) };
           });
           setCustomers(nextCustomers);
-          await upsertCachedCustomers(nextCustomers);
+          await upsertCachedCustomers(storeCacheKey, nextCustomers);
         }
         return { ok: true, message: "تم تسجيل الدفعة بنجاح", id: debtId };
       } catch (err) {
@@ -846,7 +851,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setIsOffline(true);
           await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
           setCustomers(optimisticCustomers);
-          await upsertCachedCustomers(optimisticCustomers);
+          await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
         }
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل الدفعة." };
@@ -856,10 +861,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const loadDebtDetail = useCallback(async (debtId: string): Promise<Debt | null> => {
+    if (!storeCacheKey) return null;
+
     try {
       const debt = await getDebtById(debtId);
       const customerWithDebt = customers.find((customer) => customer.debts.some((item) => item.id === debtId));
-      await upsertCachedDebts([{ ...debt, customerId: customerWithDebt?.id }]);
+      await upsertCachedDebts(storeCacheKey, [{ ...debt, customerId: customerWithDebt?.id }]);
       setCustomers((current) =>
         current.map((c) => {
           if (!c.debts.some((d) => d.id === debtId)) return c;
@@ -871,17 +878,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        return getCachedDebt(debtId);
+        return getCachedDebt(storeCacheKey, debtId);
       }
       return null;
     }
-  }, [customers]);
+  }, [customers, storeCacheKey]);
 
   // ── Invoice detail loader ────────────────────────────────────────────────────
   const loadInvoiceDetail = useCallback(async (id: string): Promise<Invoice | null> => {
+    if (!storeCacheKey) return null;
+
     try {
       const rich = await getInvoiceById(id);
-      await upsertCachedInvoices([rich]);
+      await upsertCachedInvoices(storeCacheKey, [rich]);
       setInvoices((current) => {
         const exists = current.some((inv) => inv.id === id);
         if (exists) return current.map((inv) => (inv.id === id ? rich : inv));
@@ -891,11 +900,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        return getCachedInvoice(id);
+        return getCachedInvoice(storeCacheKey, id);
       }
       return null;
     }
-  }, []);
+  }, [storeCacheKey]);
 
   // ── Sale ─────────────────────────────────────────────────────────────────────
   const completeSale = useCallback(
@@ -935,7 +944,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         let nextCustomers = customers;
 
         await queueOfflineOperation(storeCacheKey, { type: "createInvoice", payload: request, localId: invoice.id });
-        await upsertCachedInvoices([invoice]);
+        await upsertCachedInvoices(storeCacheKey, [invoice]);
         await upsertCachedProducts(storeCacheKey, nextProducts);
 
         if (invoice.remaining > 0 && customer) {
@@ -949,7 +958,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
                 }
               : item,
           );
-          await upsertCachedCustomers(nextCustomers);
+          await upsertCachedCustomers(storeCacheKey, nextCustomers);
         }
 
         setInvoices((current) => [invoice, ...current]);
@@ -1000,7 +1009,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setInvoices((current) => [invoice, ...current]);
       setInvoicesTotal((current) => current + 1);
       setProducts(nextProducts);
-      await upsertCachedInvoices([invoice]);
+      await upsertCachedInvoices(storeCacheKey, [invoice]);
       await upsertCachedProducts(storeCacheKey, nextProducts);
 
       const remaining = total - paid;
@@ -1153,19 +1162,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             case "createInvoice": {
               const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
               const saved = await apiCreateInvoice(payload);
-              await upsertCachedInvoices([saved]);
-              if (operation.localId) await deleteCachedInvoice(operation.localId);
+              await upsertCachedInvoices(storeCacheKey, [saved]);
+              if (operation.localId) await deleteCachedInvoice(storeCacheKey, operation.localId);
               break;
             }
             case "createCustomer": {
               const saved = await apiCreateCustomer(operation.payload);
-              await upsertCachedCustomers([saved]);
-              const offlineCustomerId = operation.localId ?? await findCachedOfflineCustomerId(operation.payload);
+              await upsertCachedCustomers(storeCacheKey, [saved]);
+              const offlineCustomerId = operation.localId ?? await findCachedOfflineCustomerId(storeCacheKey, operation.payload);
 
               if (offlineCustomerId) {
                 customerIdReplacements.set(offlineCustomerId, saved.id);
                 await replaceOfflineCustomerIdInQueuedOperations(storeCacheKey, offlineCustomerId, saved.id);
-                await deleteCachedCustomer(offlineCustomerId);
+                await deleteCachedCustomer(storeCacheKey, offlineCustomerId);
               }
               break;
             }
