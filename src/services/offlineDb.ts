@@ -251,6 +251,23 @@ export const offlineDb = new CashierOfflineDb();
 
 const normalizeSearch = (search?: string) => search?.trim().toLowerCase() ?? "";
 
+const isOfflineCustomerId = (id?: string): boolean => id?.startsWith("offline-customer-") ?? false;
+
+const normalizeCustomerIdentity = (input: Pick<CustomerInput, "name" | "phone">) => ({
+  name: input.name.trim().toLowerCase(),
+  phone: input.phone.trim(),
+});
+
+const hasSameOfflineCustomerIdentity = (
+  customer: Pick<Customer, "id" | "name" | "phone">,
+  input: Pick<CustomerInput, "name" | "phone">,
+): boolean => {
+  if (!isOfflineCustomerId(customer.id)) return false;
+  const customerIdentity = normalizeCustomerIdentity(customer);
+  const inputIdentity = normalizeCustomerIdentity(input);
+  return customerIdentity.name === inputIdentity.name && customerIdentity.phone === inputIdentity.phone;
+};
+
 const paginate = <T>(items: T[], page = 1, limit = 20): OfflineListResult<T> => {
   const safePage = Math.max(1, Math.floor(page));
   const safeLimit = Math.max(1, Math.floor(limit));
@@ -447,6 +464,74 @@ export async function upsertCachedCustomers(
     if (debts.length > 0) await offlineDb.debts.bulkPut(debts);
   });
 }
+
+export type QueueCachedOfflineCustomerCreationResult = {
+  customer: Customer;
+  created: boolean;
+};
+
+export const queueCachedOfflineCustomerCreation = async (
+  storeKey: string,
+  input: CustomerInput,
+  customer: Customer,
+): Promise<QueueCachedOfflineCustomerCreationResult> => {
+  const normalizedStoreKey = normalizeStoreKey(storeKey);
+  const inputIdentity = normalizeCustomerIdentity(input);
+
+  return offlineDb.transaction("rw", offlineDb.customers, offlineDb.debts, offlineDb.offlineQueue, async () => {
+    const existingCachedCustomer = await offlineDb.customers
+      .where("storeKey")
+      .equals(normalizedStoreKey)
+      .filter((cachedCustomer) =>
+        hasSameOfflineCustomerIdentity(fromCachedCustomer(cachedCustomer), input),
+      )
+      .first();
+
+    if (existingCachedCustomer) {
+      const existingCustomer = fromCachedCustomer(existingCachedCustomer);
+      const existingQueuedCreate = await offlineDb.offlineQueue
+        .where("storeKey")
+        .equals(normalizedStoreKey)
+        .filter((operation) => {
+          if (operation.type !== "createCustomer") return false;
+          const payloadIdentity = normalizeCustomerIdentity(operation.payload);
+          return (
+            operation.localId === existingCustomer.id ||
+            (payloadIdentity.name === inputIdentity.name && payloadIdentity.phone === inputIdentity.phone)
+          );
+        })
+        .first();
+
+      if (!existingQueuedCreate) {
+        await offlineDb.offlineQueue.add({
+          type: "createCustomer",
+          payload: input,
+          localId: existingCustomer.id,
+          storeKey: normalizedStoreKey,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      return { customer: existingCustomer, created: false };
+    }
+
+    await offlineDb.offlineQueue.add({
+      type: "createCustomer",
+      payload: input,
+      localId: customer.id,
+      storeKey: normalizedStoreKey,
+      createdAt: new Date().toISOString(),
+    });
+    await offlineDb.customers.put(toCachedCustomer(normalizedStoreKey, customer));
+    if (customer.debts.length > 0) {
+      await offlineDb.debts.bulkPut(
+        customer.debts.map((debt) => toCachedDebt(normalizedStoreKey, { ...debt, customerId: customer.id })),
+      );
+    }
+
+    return { customer, created: true };
+  });
+};
 
 export function listCachedCustomers(query?: OfflineListQuery): Promise<OfflineListResult<Customer>>;
 export function listCachedCustomers(storeKey: string, query?: OfflineListQuery): Promise<OfflineListResult<Customer>>;

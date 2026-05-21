@@ -7,8 +7,10 @@ import {
   listCachedCustomers,
   listCachedInvoices,
   listCachedProducts,
+  listOfflineOperations,
   hasOfflineOperations,
   offlineDb,
+  queueCachedOfflineCustomerCreation,
   queueOfflineOperation,
   replaceCachedCustomers,
   replaceCachedInvoices,
@@ -147,6 +149,64 @@ describe("offlineDb", () => {
     expect(saved?.type).toBe("createCustomer");
     expect(saved?.payload).toEqual(customer);
     expect(saved?.createdAt).toEqual(expect.any(String));
+  });
+
+  it("keeps duplicate offline customer submissions with opening debt as one cached customer and one queued create", async () => {
+    const input: CustomerInput = {
+      name: "Ahmed",
+      phone: "011",
+      initialDebt: 75,
+    };
+    const firstCustomer = makeCustomer({
+      id: "offline-customer-1",
+      debtBalance: 75,
+      debts: [
+        {
+          id: "offline-debt-offline-customer-1",
+          invoiceId: "",
+          description: "Opening debt",
+          date: "2026-05-17T10:00:00.000Z",
+          amount: 75,
+          paid: 0,
+          remaining: 75,
+          isPaid: false,
+        },
+      ],
+    });
+    const duplicateCustomer = makeCustomer({
+      id: "offline-customer-2",
+      debtBalance: 75,
+      debts: [
+        {
+          id: "offline-debt-offline-customer-2",
+          invoiceId: "",
+          description: "Opening debt",
+          date: "2026-05-17T10:00:01.000Z",
+          amount: 75,
+          paid: 0,
+          remaining: 75,
+          isPaid: false,
+        },
+      ],
+    });
+
+    const results = await Promise.all([
+      queueCachedOfflineCustomerCreation("store-a", input, firstCustomer),
+      queueCachedOfflineCustomerCreation("store-a", input, duplicateCustomer),
+    ]);
+
+    const cachedCustomers = await listCachedCustomers("store-a", { page: 1, limit: 20 });
+    expect(cachedCustomers.items).toHaveLength(1);
+    expect(cachedCustomers.total).toBe(1);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+    expect(results.every((result) => result.customer.id === cachedCustomers.items[0].id)).toBe(true);
+    await expect(listOfflineOperations("store-a")).resolves.toMatchObject([
+      {
+        type: "createCustomer",
+        payload: input,
+        localId: cachedCustomers.items[0].id,
+      },
+    ]);
   });
 
   it("queues offline sale operations with createdAt metadata", async () => {

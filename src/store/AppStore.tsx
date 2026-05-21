@@ -57,6 +57,7 @@ import {
   listCachedInvoices,
   listCachedProducts,
   listOfflineOperations,
+  queueCachedOfflineCustomerCreation,
   queueOfflineOperation,
   replaceOfflineCustomerIdInQueuedOperations,
   upsertCachedCustomers,
@@ -93,6 +94,7 @@ import type {
   Invoice,
   InvoiceItem,
   InvoiceUpdateRequest,
+  PaymentMethod,
   Product,
   ProductInput,
   SaleRequest,
@@ -118,8 +120,19 @@ export type InvoicesQuery = {
   limit: number;
 };
 
+export type CashierDraft = {
+  items: InvoiceItem[];
+  paymentMethod: PaymentMethod;
+  selectedCustomerId: string;
+  customerSearch: string;
+  paidAmount: string;
+};
+
 type AppStoreValue = {
   isOffline: boolean;
+  cashierDraft: CashierDraft;
+  setCashierDraft: (value: CashierDraft | ((current: CashierDraft) => CashierDraft)) => void;
+  resetCashierDraft: () => void;
   products: Product[];
   productsLoading: boolean;
   productsError: string | null;
@@ -181,6 +194,14 @@ const DEFAULT_INVOICES_QUERY: InvoicesQuery = {
   limit: 20,
 };
 
+export const createEmptyCashierDraft = (): CashierDraft => ({
+  items: [],
+  paymentMethod: "cash",
+  selectedCustomerId: "",
+  customerSearch: "",
+  paidAmount: "",
+});
+
 const OFFLINE_WRITE_MESSAGE = "تم حفظ العملية بدون إنترنت وسيتم إرسالها تلقائياً عند عودة الاتصال";
 
 const getSessionStoreCacheKey = (session: AuthSession | null): string | null => {
@@ -232,8 +253,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [isOffline, setIsOffline] = useState(() => !getBrowserOnlineState());
   const isOfflineRef = useRef(isOffline);
   const syncingOfflineQueueRef = useRef(false);
+  const [cashierDraft, setCashierDraft] = useState<CashierDraft>(() => createEmptyCashierDraft());
 
   isOfflineRef.current = isOffline;
+
+  const resetCashierDraft = useCallback(() => {
+    setCashierDraft(createEmptyCashierDraft());
+  }, []);
 
   // ── Products ────────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([]);
@@ -271,7 +297,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setInvoicesLoading(false);
     setInvoicesError(null);
     setInvoicesTotal(0);
-  }, [storeCacheKey]);
+    resetCashierDraft();
+  }, [storeCacheKey, resetCashierDraft]);
 
   // ── Products fetch ───────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async (query: ProductsQuery) => {
@@ -679,11 +706,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
 
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
-        const saved = buildOfflineCustomer(input);
-        await queueOfflineOperation(storeCacheKey, { type: "createCustomer", payload: input, localId: saved.id });
-        await upsertCachedCustomers(storeCacheKey, [saved]);
+        const draft = buildOfflineCustomer(input);
+        const { customer: saved, created } = await queueCachedOfflineCustomerCreation(storeCacheKey, input, draft);
         mergeCustomerIntoCurrentPage(saved);
-        setCustomersTotal((current) => current + 1);
+        if (created) setCustomersTotal((current) => current + 1);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: saved.id };
       };
 
@@ -1235,6 +1261,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStoreValue>(
     () => ({
       isOffline,
+      cashierDraft,
+      setCashierDraft,
+      resetCashierDraft,
       products,
       productsLoading,
       productsError,
@@ -1276,6 +1305,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       isOffline,
+      cashierDraft,
+      resetCashierDraft,
       products,
       productsLoading,
       productsError,

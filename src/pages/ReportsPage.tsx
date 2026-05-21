@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BadgeDollarSign, BarChart3, Boxes, ReceiptText, TrendingUp, WalletCards } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { StatusBadge } from "../components/StatusBadge";
-import { useAppStore } from "../store/AppStore";
 import { getCustomerDebtTotal, getStockStatus, getTopSellingProducts } from "../utils/calculations";
 import { formatCurrency, formatNumber, toArabicDigits } from "../utils/formatCurrency";
 import { getDailyProfit, type DailyProfit } from "../services/reportsApi";
-import { getInvoiceById } from "../services/invoicesApi";
-import type { Invoice } from "../types";
+import { loadReportsDataset, type ReportsDataset } from "../services/reportsData";
 
 const toLocalDateString = (d: Date): string => {
   const y = d.getFullYear();
@@ -18,6 +16,12 @@ const toLocalDateString = (d: Date): string => {
 
 const todayString = toLocalDateString(new Date());
 
+const EMPTY_REPORTS_DATASET: ReportsDataset = {
+  products: [],
+  customers: [],
+  invoices: [],
+};
+
 const isSameDay = (isoString: string, dateString: string): boolean => {
   try {
     return toLocalDateString(new Date(isoString)) === dateString;
@@ -27,24 +31,24 @@ const isSameDay = (isoString: string, dateString: string): boolean => {
 };
 
 export function ReportsPage() {
-  const { products, customers, invoices } = useAppStore();
-
   const [selectedDate, setSelectedDate] = useState<string>(todayString);
   const [dailyProfit, setDailyProfit] = useState<DailyProfit | null>(null);
-  const [reportInvoices, setReportInvoices] = useState<Invoice[]>([]);
-  const [topProductsLoading, setTopProductsLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [reportsDataset, setReportsDataset] = useState<ReportsDataset>(EMPTY_REPORTS_DATASET);
+  const [dailyProfitLoading, setDailyProfitLoading] = useState(false);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [dailyProfitError, setDailyProfitError] = useState<string | null>(null);
+  const [reportsError, setReportsError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const { products, customers, invoices } = reportsDataset;
 
   useEffect(() => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
-    setError(null);
+    setDailyProfitLoading(true);
+    setDailyProfitError(null);
 
     getDailyProfit(selectedDate)
       .then((data) => {
@@ -54,12 +58,12 @@ export function ReportsPage() {
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : "تعذر تحميل بيانات التقرير.");
+          setDailyProfitError(err instanceof Error ? err.message : "تعذر تحميل بيانات التقرير.");
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) {
-          setLoading(false);
+          setDailyProfitLoading(false);
         }
       });
 
@@ -68,45 +72,33 @@ export function ReportsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const invoicesWithoutItems = invoices.filter((invoice) => invoice.id && invoice.items.length === 0);
+    setReportsLoading(true);
+    setReportsError(null);
 
-    if (invoicesWithoutItems.length === 0) {
-      setReportInvoices(invoices);
-      setTopProductsLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setTopProductsLoading(true);
-
-    Promise.allSettled(invoicesWithoutItems.map((invoice) => getInvoiceById(invoice.id)))
-      .then((results) => {
-        if (cancelled) return;
-
-        const detailsById = new Map<string, Invoice>();
-        results.forEach((result) => {
-          if (result.status === "fulfilled") {
-            detailsById.set(result.value.id, result.value);
-          }
-        });
-
-        setReportInvoices(
-          invoices.map((invoice) => detailsById.get(invoice.id) ?? invoice),
-        );
+    loadReportsDataset()
+      .then((data) => {
+        if (!cancelled) {
+          setReportsDataset(data);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setReportsError(err instanceof Error ? err.message : "تعذر تحميل بيانات التقرير.");
+        }
       })
       .finally(() => {
         if (!cancelled) {
-          setTopProductsLoading(false);
+          setReportsLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [invoices]);
+  }, []);
 
-  const invoicesForTopProducts = reportInvoices.length > 0 || invoices.length === 0 ? reportInvoices : invoices;
+  const loading = dailyProfitLoading || reportsLoading;
+  const error = dailyProfitError ?? reportsError;
 
   const stats = useMemo(() => {
     const totalDebt = customers.reduce((sum, customer) => sum + getCustomerDebtTotal(customer), 0);
@@ -117,9 +109,9 @@ export function ReportsPage() {
       invoicesCount: selectedInvoices.length,
       totalDebt,
       lowStockProducts,
-      topSellingProducts: getTopSellingProducts(invoicesForTopProducts),
+      topSellingProducts: getTopSellingProducts(invoices),
     };
-  }, [products, customers, invoices, invoicesForTopProducts, selectedDate]);
+  }, [products, customers, invoices, selectedDate]);
 
   const isToday = selectedDate === todayString;
 
@@ -272,7 +264,7 @@ export function ReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {topProductsLoading ? (
+                {reportsLoading ? (
                   <tr>
                     <td colSpan={3} className="px-4 py-10 text-center font-normal text-zinc-500">
                       جاري تحميل تفاصيل المنتجات...

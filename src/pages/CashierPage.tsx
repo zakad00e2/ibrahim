@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type SetStateAction,
+} from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
@@ -6,7 +15,7 @@ import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { DEFAULT_STORE_NAME, getStoreInfo } from "../services/storeApi";
-import { useAppStore } from "../store/AppStore";
+import { useAppStore, type CashierDraft } from "../store/AppStore";
 import type { InvoiceItem, PaymentMethod, Product } from "../types";
 import {
   calculateInvoiceItemTotal,
@@ -44,6 +53,9 @@ const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
   { value: "partial", label: "دفع جزئي" },
 ];
 
+const resolveSetState = <T,>(value: SetStateAction<T>, current: T): T =>
+  typeof value === "function" ? (value as (currentValue: T) => T)(current) : value;
+
 export function CashierPage() {
   const {
     products,
@@ -52,23 +64,57 @@ export function CashierPage() {
     completeSale,
     findProductByBarcodeRemote,
     setCustomersQuery,
+    cashierDraft,
+    setCashierDraft,
+    resetCashierDraft,
   } = useAppStore();
-  const [items, setItems] = useState<InvoiceItem[]>([]);
+  const { items, paymentMethod, selectedCustomerId, customerSearch, paidAmount } = cashierDraft;
   const [barcode, setBarcode] = useState("");
   const [search, setSearch] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
-  const [customerSearch, setCustomerSearch] = useState("");
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "", initialDebt: "" });
   const [customerFormError, setCustomerFormError] = useState("");
   const [customerFormSubmitting, setCustomerFormSubmitting] = useState(false);
-  const [paidAmount, setPaidAmount] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [saleSubmitting, setSaleSubmitting] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<ReceiptSnapshot | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
   const [storeName, setStoreName] = useState(DEFAULT_STORE_NAME);
+
+  const setItems = useCallback((value: SetStateAction<InvoiceItem[]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      items: resolveSetState(value, current.items),
+    }));
+  }, [setCashierDraft]);
+
+  const setPaymentMethod = useCallback((value: SetStateAction<CashierDraft["paymentMethod"]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      paymentMethod: resolveSetState(value, current.paymentMethod),
+    }));
+  }, [setCashierDraft]);
+
+  const setSelectedCustomerId = useCallback((value: SetStateAction<CashierDraft["selectedCustomerId"]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      selectedCustomerId: resolveSetState(value, current.selectedCustomerId),
+    }));
+  }, [setCashierDraft]);
+
+  const setCustomerSearch = useCallback((value: SetStateAction<CashierDraft["customerSearch"]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      customerSearch: resolveSetState(value, current.customerSearch),
+    }));
+  }, [setCashierDraft]);
+
+  const setPaidAmount = useCallback((value: SetStateAction<CashierDraft["paidAmount"]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      paidAmount: resolveSetState(value, current.paidAmount),
+    }));
+  }, [setCashierDraft]);
 
   const customerSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -369,10 +415,7 @@ export function CashierPage() {
       setNotice({ type: result.ok ? "success" : "error", text: result.message });
 
       if (result.ok) {
-        setItems([]);
-        setPaymentMethod("cash");
-        setSelectedCustomerId("");
-        setPaidAmount("");
+        resetCashierDraft();
         setPrintReceipt(null);
         barcodeInputRef.current?.focus();
       }
