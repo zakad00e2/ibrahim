@@ -6,6 +6,17 @@ type ApiErrorPayload = {
   message?: string | string[];
   error?: string;
   statusCode?: number;
+  code?: string;
+  target?: string | string[];
+};
+
+export type ApiClientError = Error & {
+  statusCode?: number;
+  unauthorized?: boolean;
+  code?: string;
+  target?: string | string[];
+  body?: unknown;
+  retryAfterSeconds?: number;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -92,22 +103,62 @@ const buildHeaders = (extra?: Record<string, string>): Record<string, string> =>
   return headers;
 };
 
+const getRetryAfterSeconds = (response: Response): number | undefined => {
+  const raw = response.headers.get("retry-after");
+  if (!raw) {
+    return undefined;
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const buildThrottledMessage = (retryAfterSeconds?: number): string =>
+  `تجاوزت عدد المحاولات. حاول بعد ${retryAfterSeconds ?? 60} ثانية.`;
+
+export const buildApiError = (
+  response: Response,
+  payload: unknown,
+  fallback: string,
+): ApiClientError => {
+  const retryAfterSeconds = response.status === 429 ? getRetryAfterSeconds(response) : undefined;
+  const message = response.status === 429
+    ? buildThrottledMessage(retryAfterSeconds)
+    : normalizeMessage(payload, fallback);
+  const err = new Error(message) as ApiClientError;
+
+  err.statusCode = response.status;
+  err.body = payload;
+
+  if (retryAfterSeconds !== undefined) {
+    err.retryAfterSeconds = retryAfterSeconds;
+  }
+
+  if (response.status === 401) {
+    err.unauthorized = true;
+  }
+
+  if (isRecord(payload)) {
+    const code = payload.code;
+    const target = payload.target;
+
+    if (typeof code === "string") {
+      err.code = code;
+    }
+
+    if (typeof target === "string" || Array.isArray(target)) {
+      err.target = target as string | string[];
+    }
+  }
+
+  return err;
+};
+
 const handleResponse = async (response: Response, fallback: string): Promise<unknown> => {
   const payload = await readJson(response);
 
   if (!response.ok) {
-    const err = new Error(normalizeMessage(payload, fallback)) as Error & {
-      statusCode?: number;
-      unauthorized?: boolean;
-    };
-
-    err.statusCode = response.status;
-
-    if (response.status === 401) {
-      err.unauthorized = true;
-    }
-
-    throw err;
+    throw buildApiError(response, payload, fallback);
   }
 
   return payload;
