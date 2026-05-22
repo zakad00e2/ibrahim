@@ -1,6 +1,9 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
 import type { Customer, CustomerInput, Debt, DebtPayment } from "../types";
 
+const CUSTOMER_DELETE_INTERNAL_ERROR =
+  "تعذر حذف العميل من الخادم لأن لديه سجلات مرتبطة. إذا كان الرصيد المتبقي صفرًا، فالمشكلة من سجلات فواتير أو ديون قديمة وليست من الدين الحالي.";
+
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 
@@ -204,6 +207,13 @@ export const updateCustomer = async (
 };
 
 export const deleteCustomer = async (id: string): Promise<void> => {
-  await deleteJson(`/api/customers/${encodeURIComponent(id)}`);
+  try {
+    await deleteJson(`/api/customers/${encodeURIComponent(id)}`);
+  } catch (err) {
+    if (err instanceof Error && err.message.trim().toLowerCase() === "internal server error") {
+      throw new Error(CUSTOMER_DELETE_INTERNAL_ERROR);
+    }
+    throw err;
+  }
 };
 
