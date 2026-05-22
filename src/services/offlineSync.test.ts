@@ -135,6 +135,48 @@ describe("offlineSync", () => {
     });
   });
 
+  it("builds offline invoices with decimal-safe remaining balances", () => {
+    const invoice = buildOfflineInvoice({
+      items: [{
+        productId: "p1",
+        productName: "Tea",
+        barcode: "123",
+        price: 0.1,
+        wholesalePrice: 0,
+        quantity: 3,
+        total: 0.3,
+      }],
+      paymentMethod: "partial",
+      customerId: "c1",
+      paidAmount: 0.1,
+    }, [product], customer, new Date("2026-05-17T10:00:00.000Z"));
+
+    expect(invoice.total).toBe(0.3);
+    expect(invoice.paid).toBe(0.1);
+    expect(invoice.remaining).toBe(0.2);
+  });
+
+  it("applies cached debt payments with decimal-safe balances", () => {
+    const decimalCustomer: Customer = {
+      ...customer,
+      debtBalance: 0.3,
+      debts: [{
+        id: "d1",
+        invoiceId: "i1",
+        description: "Decimal debt",
+        date: "2026-05-01T00:00:00.000Z",
+        amount: 0.3,
+        paid: 0,
+        remaining: 0.3,
+      }],
+    };
+
+    expect(applyCustomerDebtPayment([decimalCustomer], "c1", 0.1 + 0.2)[0]).toMatchObject({
+      debtBalance: 0,
+      debts: [{ paid: 0.3, remaining: 0, isPaid: true }],
+    });
+  });
+
   it("replaces offline customer ids in queued sale requests", () => {
     const request: SaleRequest = {
       items: [

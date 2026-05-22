@@ -6,6 +6,7 @@ import {
   calculateItemsTotal,
   getCustomerDebtTotal,
 } from "../utils/calculations";
+import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney } from "../utils/money";
 
 const networkErrorMessages = [
   "failed to fetch",
@@ -135,7 +136,7 @@ export const buildOfflineInvoice = (
     items,
     total,
     paid,
-    remaining: Math.max(total - paid, 0),
+    remaining: maxMoney(subtractMoney(total, paid), 0),
     paymentMethod: request.paymentMethod,
   };
 };
@@ -216,23 +217,23 @@ export const applyCustomerDebtPayment = (
     if (customer.debts.length === 0) {
       return {
         ...customer,
-        debtBalance: Math.max(getCustomerDebtTotal(customer) - amount, 0),
+        debtBalance: maxMoney(subtractMoney(getCustomerDebtTotal(customer), amount), 0),
       };
     }
 
     let remainingPayment = amount;
     const debts = customer.debts.map((debt) => {
-      if (remainingPayment <= 0 || debt.remaining <= 0) return debt;
+      if (compareMoney(remainingPayment, 0) <= 0 || compareMoney(debt.remaining, 0) <= 0) return debt;
 
-      const paidNow = Math.min(debt.remaining, remainingPayment);
-      remainingPayment -= paidNow;
-      const remaining = Math.max(debt.remaining - paidNow, 0);
+      const paidNow = minMoney(debt.remaining, remainingPayment);
+      remainingPayment = subtractMoney(remainingPayment, paidNow);
+      const remaining = maxMoney(subtractMoney(debt.remaining, paidNow), 0);
 
       return {
         ...debt,
-        paid: debt.paid + paidNow,
+        paid: addMoney(debt.paid, paidNow),
         remaining,
-        isPaid: remaining === 0 ? true : debt.isPaid,
+        isPaid: compareMoney(remaining, 0) === 0 ? true : debt.isPaid,
       };
     });
 
@@ -255,14 +256,14 @@ export const applyDebtPayment = (
     const debts = customer.debts.map((debt) => {
       if (debt.id !== debtId) return debt;
 
-      const paidNow = Math.min(debt.remaining, amount);
-      const remaining = Math.max(debt.remaining - paidNow, 0);
+      const paidNow = minMoney(debt.remaining, amount);
+      const remaining = maxMoney(subtractMoney(debt.remaining, paidNow), 0);
 
       return {
         ...debt,
-        paid: debt.paid + paidNow,
+        paid: addMoney(debt.paid, paidNow),
         remaining,
-        isPaid: remaining === 0 ? true : debt.isPaid,
+        isPaid: compareMoney(remaining, 0) === 0 ? true : debt.isPaid,
       };
     });
 

@@ -84,6 +84,7 @@ import {
   getCustomerDebtTotal,
   validateDebtPaymentAmount,
 } from "../utils/calculations";
+import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney, sumMoney } from "../utils/money";
 import type {
   ActionResult,
   AuthSession,
@@ -216,8 +217,8 @@ const getSessionStoreCacheKey = (session: AuthSession | null): string | null => 
 };
 
 const toDebtSummary = (debts: Debt[]): DebtSummary => ({
-  totalDebt: debts.reduce((sum, debt) => sum + debt.amount, 0),
-  totalRemaining: debts.reduce((sum, debt) => sum + debt.remaining, 0),
+  totalDebt: sumMoney(debts.map((debt) => debt.amount)),
+  totalRemaining: sumMoney(debts.map((debt) => debt.remaining)),
   debts,
 });
 
@@ -783,7 +784,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (!customer) return { ok: false, message: "العميل غير موجود" };
       if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "أدخل مبلغ تسديد صحيح" };
       const totalDebt = getCustomerDebtTotal(customer);
-      if (amount > totalDebt) return { ok: false, message: "مبلغ التسديد أكبر من إجمالي الدين" };
+      if (compareMoney(amount, totalDebt) === 1) return { ok: false, message: "مبلغ التسديد أكبر من إجمالي الدين" };
 
       const optimisticCustomers = applyCustomerDebtPayment(customers, customerId, amount);
 
@@ -956,7 +957,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             : Number(request.paidAmount ?? 0);
 
       if (!Number.isFinite(paid) || paid < 0) return { ok: false, message: "أدخل مبلغ مدفوع صحيح" };
-      if (paid > total) return { ok: false, message: "المبلغ المدفوع لا يمكن أن يتجاوز المجموع" };
+      if (compareMoney(paid, total) === 1) return { ok: false, message: "المبلغ المدفوع لا يمكن أن يتجاوز المجموع" };
 
       const unavailable = request.items.find((item) => {
         const product = products.find((p) => p.id === item.productId);
@@ -980,7 +981,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
               ? {
                   ...item,
                   debts: [offlineDebt, ...item.debts],
-                  debtBalance: getCustomerDebtTotal(item) + offlineDebt.remaining,
+                  debtBalance: addMoney(getCustomerDebtTotal(item), offlineDebt.remaining),
                 }
               : item,
           );
@@ -1038,7 +1039,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       await upsertCachedInvoices(storeCacheKey, [invoice]);
       await upsertCachedProducts(storeCacheKey, nextProducts);
 
-      const remaining = total - paid;
+      const remaining = maxMoney(subtractMoney(total, paid), 0);
       if (remaining > 0 && customer) {
         void refreshCustomers();
       }
@@ -1112,7 +1113,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ? total
           : paymentMethod === "debt"
             ? 0
-            : Number(request.paid ?? Math.min(invoice.paid, total));
+            : Number(request.paid ?? minMoney(invoice.paid, total));
 
       if ((paymentMethod === "debt" || paymentMethod === "partial") && !customerId) {
         return { ok: false, message: "اختر العميل قبل حفظ الفاتورة" };
@@ -1122,7 +1123,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: "أدخل مبلغ مدفوع صحيح" };
       }
 
-      if (paid > total) {
+      if (compareMoney(paid, total) === 1) {
         return { ok: false, message: "المبلغ المدفوع لا يمكن أن يتجاوز المجموع" };
       }
 
