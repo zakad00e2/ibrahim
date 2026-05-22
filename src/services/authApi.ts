@@ -1,4 +1,4 @@
-import { normalizeMessage, postJson, readJson } from "./apiClient";
+import { buildApiError, postJson, readJson } from "./apiClient";
 import type {
   AuthSession,
   AuthUser,
@@ -25,7 +25,7 @@ const postPublicJson = async <TBody extends object>(path: string, body: TBody): 
   const payload = await readJson(response);
 
   if (!response.ok) {
-    throw new Error(normalizeMessage(payload, "تعذر الاتصال بالخادم. حاول مرة أخرى."));
+    throw buildApiError(response, payload, "تعذر الاتصال بالخادم. حاول مرة أخرى.");
   }
 
   return payload;

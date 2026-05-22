@@ -167,4 +167,27 @@ describe("authApi", () => {
       }),
     ).rejects.toThrow("Invalid or expired reset token");
   });
+
+  it("shows a retry delay when public auth endpoints are throttled", async () => {
+    mockFetch(
+      new Response(JSON.stringify({ statusCode: 429, message: "ThrottlerException: Too Many Requests" }), {
+        status: 429,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": "30",
+        },
+      }),
+    );
+
+    await expect(
+      superAdminLoginRequest({
+        username: "superadmin",
+        password: "wrong-password",
+      }),
+    ).rejects.toMatchObject({
+      message: "تجاوزت عدد المحاولات. حاول بعد 30 ثانية.",
+      statusCode: 429,
+      retryAfterSeconds: 30,
+    });
+  });
 });
