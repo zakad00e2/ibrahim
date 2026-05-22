@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProduct, updateProduct } from "./productsApi";
+import { createProduct, getProductById, updateProduct } from "./productsApi";
 import type { Product, ProductInput } from "../types";
 
 const makeProductInput = (overrides: Partial<ProductInput> = {}): ProductInput => ({
@@ -90,5 +90,25 @@ describe("productsApi barcode uniqueness", () => {
       "/api/products/current-product",
       expect.objectContaining({ method: "PATCH" }),
     );
+  });
+
+  it("maps product price strings through money normalization", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
+      product: {
+        id: "p1",
+        name: "Tea",
+        barcode: "123",
+        price: "0.30000000000000004",
+        unitCost: "0.10000000000000002",
+        stock: 4,
+        minStock: 1,
+        isActive: true,
+      },
+    })));
+
+    await expect(getProductById("p1")).resolves.toMatchObject({
+      price: 0.3,
+      wholesalePrice: 0.1,
+    });
   });
 });

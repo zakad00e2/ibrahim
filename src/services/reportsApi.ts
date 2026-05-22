@@ -1,4 +1,5 @@
 import { getJson } from "./apiClient";
+import { toMoneyNumber } from "../utils/money";
 
 export type DailyProfit = {
   date: string;
@@ -10,10 +11,8 @@ export type DailyProfit = {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 
-const parseNum = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-};
+const parseMoney = (v: unknown): number =>
+  toMoneyNumber(typeof v === "string" || typeof v === "number" ? v : undefined);
 
 export const getDailyProfit = async (date: string): Promise<DailyProfit> => {
   const payload = await getJson(
@@ -25,8 +24,8 @@ export const getDailyProfit = async (date: string): Promise<DailyProfit> => {
   }
   return {
     date: String(dto.date ?? date),
-    totalRevenue: parseNum(dto.totalRevenue ?? dto.revenue ?? dto.sales),
-    totalCost: parseNum(dto.totalCost ?? dto.cost),
-    netProfit: parseNum(dto.netProfit ?? dto.profit),
+    totalRevenue: parseMoney(dto.totalRevenue ?? dto.revenue ?? dto.sales),
+    totalCost: parseMoney(dto.totalCost ?? dto.cost),
+    netProfit: parseMoney(dto.netProfit ?? dto.profit),
   };
 };

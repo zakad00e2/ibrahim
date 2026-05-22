@@ -1,5 +1,6 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
 import type { Product, ProductInput } from "../types";
+import { toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -10,6 +11,19 @@ const parseApiNumber = (value: unknown): number | null => {
   }
 
   const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseApiMoney = (value: unknown): number | null => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = toMoneyNumber(
+    typeof value === "string" || typeof value === "number" ? value : undefined,
+    Number.NaN,
+  );
 
   return Number.isFinite(parsed) ? parsed : null;
 };
@@ -26,14 +40,26 @@ const getApiNumber = (dto: Record<string, unknown>, keys: string[], fallback = 0
   return fallback;
 };
 
+const getApiMoney = (dto: Record<string, unknown>, keys: string[], fallback = 0): number => {
+  for (const key of keys) {
+    const parsed = parseApiMoney(dto[key]);
+
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+};
+
 const getWholesalePrice = (dto: Record<string, unknown>): number => {
-  const wholesalePrice = parseApiNumber(dto.wholesalePrice);
+  const wholesalePrice = parseApiMoney(dto.wholesalePrice);
 
   if (wholesalePrice !== null && wholesalePrice !== 0) {
     return wholesalePrice;
   }
 
-  return getApiNumber(
+  return getApiMoney(
     dto,
     ["unitCost", "costPrice", "purchasePrice", "wholesale_price", "wholeSalePrice"],
     wholesalePrice ?? 0,
@@ -103,7 +129,7 @@ export const mapProduct = (dto: unknown): Product => {
     id: String(dto.id ?? ""),
     name: String(dto.name ?? ""),
     barcode: String(dto.barcode ?? ""),
-    price: getApiNumber(dto, ["price"]),
+    price: getApiMoney(dto, ["price"]),
     wholesalePrice: getWholesalePrice(dto),
     stock: getApiNumber(dto, ["stock"]),
     minStock: getApiNumber(dto, ["minStock"], 5),
