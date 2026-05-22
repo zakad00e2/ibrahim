@@ -9,7 +9,7 @@ const toDecimal = (value: MoneyInput, fallback = 0): Decimal => {
 
   try {
     const decimal = new Decimal(value);
-    return decimal.isFinite() ? decimal : new Decimal(fallback);
+    return decimal.isFinite() ? decimal.toDecimalPlaces(12) : new Decimal(fallback);
   } catch {
     return new Decimal(fallback);
   }

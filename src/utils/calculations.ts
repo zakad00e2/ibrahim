@@ -1,23 +1,25 @@
 import type { Customer, Debt, Invoice, InvoiceItem, PaymentMethod, Product } from "../types";
+import { addMoney, compareMoney, multiplyMoney, subtractMoney, sumMoney } from "./money";
 
 export type DebtPaymentValidationError = "missing-debt" | "invalid-amount" | "amount-exceeds-remaining";
 
-export const calculateInvoiceItemTotal = (price: number, quantity: number) => price * quantity;
+export const calculateInvoiceItemTotal = (price: number, quantity: number) =>
+  multiplyMoney(price, quantity);
 
 export const calculateItemsTotal = (items: InvoiceItem[]) =>
-  items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  sumMoney(items.map((item) => calculateInvoiceItemTotal(item.price, item.quantity)));
 
 export const calculateInvoiceItemCost = (wholesalePrice: number, quantity: number) =>
-  wholesalePrice * quantity;
+  multiplyMoney(wholesalePrice, quantity);
 
 export const calculateItemsCost = (items: InvoiceItem[]) =>
-  items.reduce((sum, item) => sum + calculateInvoiceItemCost(item.wholesalePrice, item.quantity), 0);
+  sumMoney(items.map((item) => calculateInvoiceItemCost(item.wholesalePrice, item.quantity)));
 
 export const calculateItemsProfit = (items: InvoiceItem[]) =>
-  items.reduce((sum, item) => sum + (item.price - item.wholesalePrice) * item.quantity, 0);
+  sumMoney(items.map((item) => multiplyMoney(subtractMoney(item.price, item.wholesalePrice), item.quantity)));
 
 export const calculateCustomerDebt = (debts: Customer["debts"]) =>
-  debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  sumMoney(debts.map((debt) => debt.remaining));
 
 export const getCustomerDebtTotal = (customer: Pick<Customer, "debts" | "debtBalance">) => {
   const calculated = calculateCustomerDebt(customer.debts);
@@ -36,7 +38,7 @@ export const validateDebtPaymentAmount = (
     return "invalid-amount";
   }
 
-  return amount > debt.remaining ? "amount-exceeds-remaining" : null;
+  return compareMoney(amount, debt.remaining) === 1 ? "amount-exceeds-remaining" : null;
 };
 
 export const getStockStatus = (stock: number) => {
@@ -80,7 +82,7 @@ export const getTopSellingProducts = (invoices: Invoice[]) => {
       byProduct.set(productKey, {
         name: productName || current.name,
         quantity: current.quantity + item.quantity,
-        total: current.total + lineTotal,
+        total: addMoney(current.total, lineTotal),
       });
     });
   });
