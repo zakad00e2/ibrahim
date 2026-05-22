@@ -1,28 +1,28 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
 import type { Customer, CustomerInput, Debt, DebtPayment } from "../types";
-
-const CUSTOMER_DELETE_INTERNAL_ERROR =
-  "تعذر حذف العميل من الخادم لأن لديه سجلات مرتبطة. إذا كان الرصيد المتبقي صفرًا، فالمشكلة من سجلات فواتير أو ديون قديمة وليست من الدين الحالي.";
+import { subtractMoney, sumMoney, toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 
 const parseApiNumber = (value: unknown): number => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+  return toMoneyNumber(typeof value === "string" || typeof value === "number" ? value : undefined);
 };
 
 const firstApiNumber = (...values: unknown[]): number | undefined => {
   for (const value of values) {
     if (value === undefined || value === null || value === "") continue;
-    const n = Number(value);
+    const n = toMoneyNumber(
+      typeof value === "string" || typeof value === "number" ? value : undefined,
+      Number.NaN,
+    );
     if (Number.isFinite(n)) return n;
   }
   return undefined;
 };
 
 const calculateDebtBalance = (debts: Debt[]) =>
-  debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  sumMoney(debts.map((debt) => debt.remaining));
 
 const extractCustomerDebtBalance = (dto: Record<string, unknown>, debts: Debt[]): number | undefined => {
   const summary = isRecord(dto.summary)
@@ -82,7 +82,7 @@ export const mapDebt = (dto: unknown): Debt => {
     description: String(dto.description ?? ""),
     date: String(dto.date ?? dto.createdAt ?? dto.created_at ?? ""),
     amount,
-    paid: paid || Math.max(amount - remaining, 0),
+    paid: paid || Math.max(subtractMoney(amount, remaining), 0),
     remaining,
     isPaid: dto.isPaid === true,
     notes: typeof dto.notes === "string" ? dto.notes : undefined,
@@ -207,13 +207,6 @@ export const updateCustomer = async (
 };
 
 export const deleteCustomer = async (id: string): Promise<void> => {
-  try {
-    await deleteJson(`/api/customers/${encodeURIComponent(id)}`);
-  } catch (err) {
-    if (err instanceof Error && err.message.trim().toLowerCase() === "internal server error") {
-      throw new Error(CUSTOMER_DELETE_INTERNAL_ERROR);
-    }
-    throw err;
-  }
+  await deleteJson(`/api/customers/${encodeURIComponent(id)}`);
 };
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteCustomer } from "./customersApi";
+import { deleteCustomer, getCustomerById } from "./customersApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -12,7 +12,7 @@ describe("customersApi", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses a customer-specific message when the delete endpoint returns a raw internal error", async () => {
+  it("preserves backend delete errors instead of assuming a foreign-key delete failure", async () => {
     mockFetch(
       new Response(JSON.stringify({ message: "Internal server error" }), {
         status: 500,
@@ -20,9 +20,7 @@ describe("customersApi", () => {
       }),
     );
 
-    await expect(deleteCustomer("customer-1")).rejects.toThrow(
-      "تعذر حذف العميل من الخادم لأن لديه سجلات مرتبطة. إذا كان الرصيد المتبقي صفرًا، فالمشكلة من سجلات فواتير أو ديون قديمة وليست من الدين الحالي.",
-    );
+    await expect(deleteCustomer("customer-1")).rejects.toThrow("Internal server error");
   });
 
   it("sends the delete request to the selected customer endpoint", async () => {
@@ -33,6 +31,46 @@ describe("customersApi", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/customers/customer%201", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("maps backend string debt fields into numeric customer debt models", async () => {
+    mockFetch(
+      new Response(JSON.stringify({
+        id: "c1",
+        name: "Ibrahim",
+        phone: "010",
+        summary: {
+          totalRemaining: "60.15",
+        },
+        debts: [{
+          id: "d1",
+          invoiceId: "i1",
+          description: "Invoice",
+          date: "2026-05-22T10:00:00.000Z",
+          amount: "100.25",
+          paid: "40.10",
+          remaining: "60.15",
+          payments: [{
+            id: "p1",
+            amount: "40.10",
+            date: "2026-05-22T10:05:00.000Z",
+          }],
+        }],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getCustomerById("c1")).resolves.toMatchObject({
+      debtBalance: 60.15,
+      debts: [{
+        amount: 100.25,
+        paid: 40.1,
+        remaining: 60.15,
+        payments: [{ amount: 40.1 }],
+      }],
     });
   });
 });

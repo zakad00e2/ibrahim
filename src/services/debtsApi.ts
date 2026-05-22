@@ -1,6 +1,7 @@
 import { getJson, postJson } from "./apiClient";
 import { mapDebt, mapDebtPayment } from "./customersApi";
 import type { Debt, DebtSummary } from "../types";
+import { sumMoney, toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -8,7 +9,10 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const firstApiNumber = (...values: unknown[]): number | undefined => {
   for (const value of values) {
     if (value === undefined || value === null || value === "") continue;
-    const n = Number(value);
+    const n = toMoneyNumber(
+      typeof value === "string" || typeof value === "number" ? value : undefined,
+      Number.NaN,
+    );
     if (Number.isFinite(n)) return n;
   }
   return undefined;
@@ -20,8 +24,8 @@ const mapDebtSummaryResponse = (payload: unknown): DebtSummary => {
   const summaryData = isRecord(payload.summary) ? payload.summary : payload;
   const rawDebts = Array.isArray(payload.debts) ? payload.debts : [];
   const debts = rawDebts.map(mapDebt);
-  const debtsTotal = debts.reduce((sum, debt) => sum + debt.amount, 0);
-  const debtsRemaining = debts.reduce((sum, debt) => sum + debt.remaining, 0);
+  const debtsTotal = sumMoney(debts.map((debt) => debt.amount));
+  const debtsRemaining = sumMoney(debts.map((debt) => debt.remaining));
   const totalDebt =
     firstApiNumber(
       (summaryData as Record<string, unknown>).totalAmount,
