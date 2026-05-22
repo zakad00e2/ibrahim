@@ -73,6 +73,10 @@ describe("loadReportsDataset", () => {
     vi.mocked(getCustomerDebts).mockReset();
   });
 
+  it("keeps report pagination at the backend maximum", () => {
+    expect(REPORTS_PAGE_SIZE).toBe(100);
+  });
+
   it("loads complete report data independently from paginated invoice and debt pages", async () => {
     const productsPage = [product("p1", 2), product("p2", 9)];
     const customersPage = [customer("c1", 25), customer("c2")];
