@@ -1,5 +1,6 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
 import type { Invoice, InvoiceItem, InvoiceUpdateRequest, PaymentMethod, SaleRequest } from "../types";
+import { toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -7,6 +8,18 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const parseNum = (value: unknown, fallback = 0): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+};
+
+const parseMoney = (value: unknown, fallback = 0): number =>
+  toMoneyNumber(typeof value === "string" || typeof value === "number" ? value : undefined, fallback);
+
+const firstMoney = (...values: unknown[]): number => {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    return parseMoney(value);
+  }
+
+  return 0;
 };
 
 const paymentMethodMap: Record<PaymentMethod, "CASH" | "DEBT" | "PARTIAL"> = {
@@ -29,7 +42,7 @@ const paymentMethodFromApi = (raw: unknown): PaymentMethod => {
 const mapInvoiceItem = (dto: unknown): InvoiceItem => {
   if (!isRecord(dto)) throw new Error("invalid invoice item dto");
   const product = isRecord(dto.product) ? dto.product : undefined;
-  const price = parseNum(
+  const price = parseMoney(
     dto.price ??
       dto.unitPrice ??
       dto.unit_price ??
@@ -41,13 +54,14 @@ const mapInvoiceItem = (dto: unknown): InvoiceItem => {
       product?.price,
   );
   const quantity = parseNum(dto.quantity ?? dto.qty, 1);
-  const total = parseNum(dto.total ?? dto.lineTotal ?? dto.line_total ?? dto.subtotal ?? dto.amount ?? price * quantity);
-  const wholesalePrice =
-    parseNum(dto.unitCost ?? dto.unit_cost) ||
-    parseNum(dto.wholesalePrice) ||
-    parseNum(dto.wholesale_price) ||
-    parseNum(dto.costPrice ?? dto.cost_price) ||
-    parseNum(product?.wholesalePrice ?? product?.wholesale_price ?? product?.costPrice ?? product?.cost_price);
+  const total = parseMoney(dto.total ?? dto.lineTotal ?? dto.line_total ?? dto.subtotal ?? dto.amount, price * quantity);
+  const wholesalePrice = firstMoney(
+    dto.unitCost ?? dto.unit_cost,
+    dto.wholesalePrice,
+    dto.wholesale_price,
+    dto.costPrice ?? dto.cost_price,
+    product?.wholesalePrice ?? product?.wholesale_price ?? product?.costPrice ?? product?.cost_price,
+  );
 
   return {
     productId: String(dto.productId ?? dto.product_id ?? product?.id ?? ""),
@@ -93,7 +107,7 @@ export const mapInvoice = (dto: unknown): Invoice => {
   const paymentMethod = paymentMethodFromApi(
     dto.paymentMethod ?? dto.payment_method ?? dto.method ?? dto.paymentType ?? dto.payment_type,
   );
-  const total = parseNum(
+  const total = parseMoney(
     dto.total ?? dto.totalAmount ?? dto.total_amount ?? dto.amount ?? dto.grandTotal ?? dto.grand_total,
   );
   const rawPaid =
@@ -118,9 +132,9 @@ export const mapInvoice = (dto: unknown): Invoice => {
     dto.debtAmount ??
     dto.debt_amount;
   const paidFromApi =
-    rawPaid === undefined || rawPaid === null || rawPaid === "" ? undefined : parseNum(rawPaid);
+    rawPaid === undefined || rawPaid === null || rawPaid === "" ? undefined : parseMoney(rawPaid);
   const remainingFromApi =
-    rawRemaining === undefined || rawRemaining === null || rawRemaining === "" ? undefined : parseNum(rawRemaining);
+    rawRemaining === undefined || rawRemaining === null || rawRemaining === "" ? undefined : parseMoney(rawRemaining);
   const remaining =
     remainingFromApi ?? Math.max(total - (paidFromApi ?? (paymentMethod === "cash" ? total : 0)), 0);
   const paid = paidFromApi ?? Math.max(total - remaining, 0);
@@ -228,7 +242,7 @@ export const getInvoiceById = async (id: string): Promise<Invoice> => {
 
 export const getInvoiceByNumber = async (number: string): Promise<Invoice> => {
   const payload = await getJson(
-    `/api/invoices/number/${encodeURIComponent(number)}`,
+    `/api/invoices/by-number/${encodeURIComponent(number)}`,
   );
   return invoiceFromResponse(payload);
 };
