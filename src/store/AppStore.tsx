@@ -235,6 +235,17 @@ const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
 
 const isOfflineCustomerId = (id?: string): boolean => id?.startsWith("offline-customer-") ?? false;
 
+const productMatchesQuery = (product: Product, query: ProductsQuery): boolean => {
+  const search = query.search.trim().toLowerCase();
+  const matchesActiveState = query.isActive === undefined || product.isActive === query.isActive;
+  const matchesSearch =
+    !search ||
+    product.name.toLowerCase().includes(search) ||
+    product.barcode.toLowerCase().includes(search);
+
+  return matchesActiveState && matchesSearch;
+};
+
 const findCachedOfflineCustomerId = async (storeCacheKey: string, input: CustomerInput): Promise<string | undefined> => {
   const cached = await listCachedCustomers(storeCacheKey, { page: 1, limit: Number.MAX_SAFE_INTEGER });
   const name = input.name.trim();
@@ -574,6 +585,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const addCreatedProductToCurrentQuery = useCallback((savedProduct: Product) => {
+    const query = productsQueryRef.current;
+
+    if (!productMatchesQuery(savedProduct, query)) {
+      return;
+    }
+
+    setProductsTotal((current) => current + 1);
+    setProducts((current) => {
+      const exists = current.some((p) => p.id === savedProduct.id);
+      if (exists) return current.map((p) => (p.id === savedProduct.id ? savedProduct : p));
+      return [savedProduct, ...current].slice(0, query.limit);
+    });
+  }, []);
+
   const addProduct = useCallback(
     async (input: ProductInput): Promise<ActionResult> => {
       if (!storeCacheKey) return { ok: false, message: "جلسة المتجر غير متاحة" };
@@ -581,15 +607,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       try {
         const saved = await apiCreateProduct(input);
         await upsertCachedProducts(storeCacheKey, [saved]);
-        await fetchProducts(productsQueryRef.current);
-        mergeProductIntoCurrentPage(saved);
+        addCreatedProductToCurrentQuery(saved);
         void fetchLowStock();
         return { ok: true, message: "تمت إضافة المنتج بنجاح", id: saved.id };
       } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة المنتج." };
       }
     },
-    [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage, storeCacheKey],
+    [addCreatedProductToCurrentQuery, fetchLowStock, storeCacheKey],
   );
 
   const updateProduct = useCallback(

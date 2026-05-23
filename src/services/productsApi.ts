@@ -254,7 +254,6 @@ export const createProduct = async (input: ProductInput): Promise<Product> => {
     wholesalePrice: requireFiniteNumber(input.wholesalePrice, "wholesalePrice"),
     stock: requireFiniteNumber(input.stock, "stock"),
     minStock: requireFiniteNumber(input.minStock, "minStock"),
-    isActive: input.isActive ?? true,
   });
 
   return assertWholesalePriceSaved(productFromResponse(payload), input.wholesalePrice);

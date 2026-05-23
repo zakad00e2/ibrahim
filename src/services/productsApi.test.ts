@@ -61,6 +61,21 @@ describe("productsApi barcode uniqueness", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/products", expect.objectContaining({ method: "POST" }));
   });
 
+  it("does not send isActive when creating a product", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "Not found" }, 404))
+      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "new-product" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProduct(makeProductInput());
+
+    const createOptions = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const requestBody = JSON.parse(String(createOptions.body)) as Record<string, unknown>;
+
+    expect(requestBody).not.toHaveProperty("isActive");
+  });
+
   it("blocks updating a product to a barcode used by a different product", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeProduct({ id: "other-product" })));
     vi.stubGlobal("fetch", fetchMock);
