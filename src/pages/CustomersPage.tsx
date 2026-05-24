@@ -499,16 +499,9 @@ export function CustomersPage() {
         size="lg"
         footer={
           selectedCustomer ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <Button variant="secondary" onClick={closeDetails}>
                 إغلاق
-              </Button>
-              <Button
-                icon={<WalletCards className="h-5 w-5" />}
-                disabled={getCustomerDebtTotal(selectedCustomer) === 0}
-                onClick={() => setShowPaymentForm((v) => !v)}
-              >
-                تسديد دين
               </Button>
             </div>
           ) : null
