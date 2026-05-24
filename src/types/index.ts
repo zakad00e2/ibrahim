@@ -31,6 +31,7 @@ export type DebtPayment = {
 export type Debt = {
   id: string;
   invoiceId: string;
+  invoiceNumber?: string;
   description: string;
   date: string;
   amount: number;

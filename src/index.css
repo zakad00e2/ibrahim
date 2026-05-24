@@ -46,6 +46,20 @@
   --digit-dir-y: 1;
 }
 
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #f7f8f6;
+}
+
+html.modal-open {
+  background: #8c8d8c;
+}
+
+html.modal-open body {
+  background: #8c8d8c;
+}
+
 * {
   box-sizing: border-box;
   letter-spacing: 0;
@@ -54,9 +68,32 @@
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #f7f8f6;
   color: #18181b;
+}
+
+#root {
+  min-height: 100dvh;
+  background: #f7f8f6;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: -100px;
+  padding-top: calc(100px + max(0.5rem, env(safe-area-inset-top, 0px)));
+  padding-right: calc(100px + max(0.5rem, env(safe-area-inset-right, 0px)));
+  padding-bottom: calc(100px + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+  padding-left: calc(100px + max(0.5rem, env(safe-area-inset-left, 0px)));
+}
+
+@media (min-width: 640px) {
+  .modal-backdrop {
+    padding-top: calc(100px + max(1rem, env(safe-area-inset-top, 0px)));
+    padding-right: calc(100px + max(1rem, env(safe-area-inset-right, 0px)));
+    padding-bottom: calc(100px + max(1rem, env(safe-area-inset-bottom, 0px)));
+    padding-left: calc(100px + max(1rem, env(safe-area-inset-left, 0px)));
+  }
 }
 
 h1,

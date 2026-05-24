@@ -65,6 +65,7 @@ export const mapDebtPayment = (dto: unknown): DebtPayment => {
 
 export const mapDebt = (dto: unknown): Debt => {
   if (!isRecord(dto)) throw new Error("invalid debt dto");
+  const invoice = isRecord(dto.invoice) ? dto.invoice : undefined;
   const payments = Array.isArray(dto.payments)
     ? dto.payments.map(mapDebtPayment)
     : undefined;
@@ -79,6 +80,10 @@ export const mapDebt = (dto: unknown): Debt => {
   return {
     id: String(dto.id ?? ""),
     invoiceId: String(dto.invoiceId ?? dto.invoice_id ?? ""),
+    invoiceNumber:
+      dto.invoiceNumber !== undefined || dto.invoice_number !== undefined || invoice?.number !== undefined
+        ? String(dto.invoiceNumber ?? dto.invoice_number ?? invoice?.number)
+        : undefined,
     description: String(dto.description ?? ""),
     date: String(dto.date ?? dto.createdAt ?? dto.created_at ?? ""),
     amount,

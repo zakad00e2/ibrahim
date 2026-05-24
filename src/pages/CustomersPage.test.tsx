@@ -27,8 +27,22 @@ const storeMocks = vi.hoisted(() => {
     debts: [debt],
   };
 
+  const invoice = {
+    id: "invoice-1",
+    number: "INV-2026-001",
+    date: "2026-05-23T10:00:00.000Z",
+    customerId: "customer-1",
+    customerName: "رامي رامي",
+    items: [],
+    total: 50,
+    paid: 20,
+    remaining: 30,
+    paymentMethod: "partial" as const,
+  };
+
   return {
     customer,
+    invoice,
     addCustomer: vi.fn(async () => ({ ok: true, message: "ok", id: "customer-2" })),
     deleteCustomer: vi.fn(async () => ({ ok: true, message: "ok" })),
     loadCustomerDetail: vi.fn(async () => undefined),
@@ -48,7 +62,7 @@ vi.mock("../store/AppStore", () => ({
     customersError: null,
     customersQuery: { search: "", page: 1, limit: 20 },
     customersTotal: 1,
-    invoices: [],
+    invoices: [storeMocks.invoice],
     setCustomersQuery: storeMocks.setCustomersQuery,
     loadCustomerDetail: storeMocks.loadCustomerDetail,
     addCustomer: storeMocks.addCustomer,
@@ -111,7 +125,7 @@ describe("CustomersPage details modal", () => {
       findButtonByText(mounted!.container, "تسديد الدين").click();
     });
 
-    const dialog = mounted.container.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
     if (!(dialog instanceof HTMLElement)) {
       throw new Error("Customer details dialog was not rendered");
     }
@@ -123,5 +137,23 @@ describe("CustomersPage details modal", () => {
 
     expect(footer.textContent).not.toContain("تسديد دين");
     expect(footer.textContent).toContain("إغلاق");
+  });
+
+  it("shows invoice number instead of debt description in the customer debts table", async () => {
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "تسديد الدين").click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Customer details dialog was not rendered");
+    }
+
+    expect(dialog.textContent).toContain("رقم الفاتورة");
+    expect(dialog.textContent).toContain("INV-2026-001");
+    expect(dialog.textContent).not.toContain("الوصف");
+    expect(dialog.textContent).not.toContain("فاتورة اختبار");
   });
 });

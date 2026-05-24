@@ -103,6 +103,14 @@ export function CustomersPage() {
   );
   const selectedDebtDisplayPaid = selectedDebtInvoice ? selectedDebtInvoice.paid : (selectedDebt?.paid ?? 0);
 
+  const getDebtInvoiceNumber = useCallback(
+    (debt: Debt) => {
+      const invoiceNumber = debt.invoiceNumber ?? invoices.find((invoice) => invoice.id === debt.invoiceId)?.number;
+      return invoiceNumber || "غير متوفر";
+    },
+    [invoices],
+  );
+
   const openAddModal = () => {
     setEditingCustomer(null);
     setForm(emptyForm);
@@ -562,7 +570,7 @@ export function CustomersPage() {
               <table className="w-full min-w-[720px] text-right text-sm sm:min-w-[780px]">
                 <thead className="bg-zinc-50 text-xs font-medium text-zinc-500">
                   <tr>
-                    <th className="px-4 py-3">الوصف</th>
+                    <th className="px-4 py-3">رقم الفاتورة</th>
                     <th className="px-4 py-3">التاريخ</th>
                     <th className="px-4 py-3">أصل الدين</th>
                     <th className="px-4 py-3">المدفوع</th>
@@ -580,7 +588,7 @@ export function CustomersPage() {
                   ) : (
                     selectedCustomer.debts.map((debt) => (
                       <tr key={debt.id}>
-                        <td className="px-4 py-3 font-medium text-zinc-950">{debt.description}</td>
+                        <td className="px-4 py-3 font-medium text-zinc-950">{getDebtInvoiceNumber(debt)}</td>
                         <td className="px-4 py-3 font-normal text-zinc-600">{formatDate(debt.date)}</td>
                         <td className="px-4 py-3 font-medium">
                           <AnimatedDigits value={formatCurrency(debt.amount)} />
