@@ -3,8 +3,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Product, ProductInput } from "../types";
+import type { Customer, CustomerInput, Invoice, Product, ProductInput, SaleRequest } from "../types";
 import { AppStoreProvider, useAppStore } from "./AppStore";
+import type { OfflineQueueDrainOptions } from "../services/offlineSync";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -126,6 +127,44 @@ const productInput: ProductInput = {
   stock: createdProduct.stock,
   minStock: createdProduct.minStock,
   isActive: createdProduct.isActive,
+};
+
+const queuedSaleRequest: SaleRequest = {
+  items: [{
+    productId: "product-1",
+    productName: "Rice",
+    barcode: "111",
+    price: 20,
+    wholesalePrice: 15,
+    quantity: 1,
+    total: 20,
+  }],
+  paymentMethod: "cash",
+};
+
+const syncedInvoice: Invoice = {
+  id: "server-invoice-1",
+  number: "INV-1",
+  date: "2026-05-25T10:00:00.000Z",
+  customerName: "بيع مباشر",
+  items: queuedSaleRequest.items,
+  total: 20,
+  paid: 20,
+  remaining: 0,
+  paymentMethod: "cash",
+};
+
+const queuedCustomerInput: CustomerInput = {
+  name: "Ibrahim",
+  phone: "010",
+};
+
+const syncedCustomer: Customer = {
+  id: "server-customer-1",
+  name: "Ibrahim",
+  phone: "010",
+  debts: [],
+  debtBalance: 0,
 };
 
 type StoreSnapshot = ReturnType<typeof useAppStore>;
@@ -252,5 +291,70 @@ describe("AppStore product actions", () => {
     expect(mounted.getStore().products).toEqual([createdProduct, existingProduct]);
     expect(mounted.getStore().productsTotal).toBe(2);
     expect(mounted.getStore().productsLoading).toBe(false);
+  });
+
+  it("passes queued offline invoice local id as clientInvoiceId when syncing", async () => {
+    const localId = "offline-invoice-1779012000000";
+    invoiceApiMocks.createInvoice.mockResolvedValue(syncedInvoice);
+    offlineDbMocks.listOfflineOperations.mockResolvedValue([{
+      id: 1,
+      type: "createInvoice",
+      payload: queuedSaleRequest,
+      localId,
+      createdAt: "2026-05-17T10:00:00.000Z",
+    }]);
+    offlineSyncMocks.resolveOfflineCustomerReference.mockImplementation((payload: SaleRequest) => payload);
+    offlineSyncMocks.drainOfflineQueue.mockImplementation(async (options: OfflineQueueDrainOptions) => {
+      const operations = await options.listOperations();
+
+      for (const operation of operations) {
+        await options.processOperation(operation, new Map<string, string>());
+        if (operation.id) await options.deleteOperation(operation.id);
+      }
+
+      return { processedAny: operations.length > 0, drained: true, wentOffline: false };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(invoiceApiMocks.createInvoice).toHaveBeenCalledWith(queuedSaleRequest, {
+        clientInvoiceId: localId,
+      });
+    });
+    expect(offlineDbMocks.deleteCachedInvoice).toHaveBeenCalledWith("store:store-1", localId);
+  });
+
+  it("passes queued offline customer local id as clientCustomerId when syncing", async () => {
+    const localId = "offline-customer-1779012000000";
+    customerApiMocks.createCustomer.mockResolvedValue(syncedCustomer);
+    offlineDbMocks.listOfflineOperations.mockResolvedValue([{
+      id: 1,
+      type: "createCustomer",
+      payload: queuedCustomerInput,
+      localId,
+      createdAt: "2026-05-17T10:00:00.000Z",
+    }]);
+    offlineSyncMocks.drainOfflineQueue.mockImplementation(async (options: OfflineQueueDrainOptions) => {
+      const operations = await options.listOperations();
+
+      for (const operation of operations) {
+        await options.processOperation(operation, new Map<string, string>());
+        if (operation.id) await options.deleteOperation(operation.id);
+      }
+
+      return { processedAny: operations.length > 0, drained: true, wentOffline: false };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(customerApiMocks.createCustomer).toHaveBeenCalledWith(queuedCustomerInput, {
+        clientCustomerId: localId,
+      });
+    });
+    expect(offlineDbMocks.deleteCachedCustomer).toHaveBeenCalledWith("store:store-1", localId);
   });
 });

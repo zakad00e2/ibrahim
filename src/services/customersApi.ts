@@ -154,6 +154,10 @@ export type ListCustomersParams = {
   limit?: number;
 };
 
+export type CreateCustomerOptions = {
+  clientCustomerId?: string;
+};
+
 const buildQuery = (params: ListCustomersParams): string => {
   const entries: string[] = [];
   if (params.search !== undefined && params.search !== "") {
@@ -188,10 +192,14 @@ export const getCustomerById = async (id: string): Promise<Customer> => {
   return customerFromResponse(payload);
 };
 
-export const createCustomer = async (input: CustomerInput): Promise<Customer> => {
+export const createCustomer = async (
+  input: CustomerInput,
+  options: CreateCustomerOptions = {},
+): Promise<Customer> => {
   const body: Record<string, unknown> = {
     name: input.name.trim(),
     phone: input.phone.trim() || undefined,
+    clientCustomerId: options.clientCustomerId,
   };
   if (typeof input.initialDebt === "number" && input.initialDebt > 0) {
     body.initialDebt = input.initialDebt;

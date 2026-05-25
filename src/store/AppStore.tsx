@@ -1213,13 +1213,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           switch (operation.type) {
             case "createInvoice": {
               const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
-              const saved = await apiCreateInvoice(payload);
+              const saved = await apiCreateInvoice(payload, { clientInvoiceId: operation.localId });
               await upsertCachedInvoices(storeCacheKey, [saved]);
               if (operation.localId) await deleteCachedInvoice(storeCacheKey, operation.localId);
               break;
             }
             case "createCustomer": {
-              const saved = await apiCreateCustomer(operation.payload);
+              const saved = await apiCreateCustomer(operation.payload, { clientCustomerId: operation.localId });
               await upsertCachedCustomers(storeCacheKey, [saved]);
               const offlineCustomerId = operation.localId ?? await findCachedOfflineCustomerId(storeCacheKey, operation.payload);
 

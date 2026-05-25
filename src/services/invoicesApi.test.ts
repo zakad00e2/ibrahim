@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getInvoiceByNumber, listInvoices } from "./invoicesApi";
+import { createInvoice, getInvoiceByNumber, listInvoices } from "./invoicesApi";
+import type { SaleRequest } from "../types";
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -73,5 +74,69 @@ describe("invoicesApi", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/invoices/by-number/12", expect.objectContaining({
       method: "GET",
     }));
+  });
+
+  it("includes clientInvoiceId when provided for offline queue invoice creation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      id: "server-invoice-1",
+      number: 33,
+      total: "20",
+      paid: "20",
+      remaining: "0",
+      items: [],
+      paymentMethod: "CASH",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request: SaleRequest = {
+      items: [{
+        productId: "product-1",
+        productName: "Tea",
+        barcode: "123",
+        price: 10,
+        wholesalePrice: 7,
+        quantity: 2,
+        total: 20,
+      }],
+      paymentMethod: "cash",
+    };
+
+    await createInvoice(request, { clientInvoiceId: "offline-invoice-1779012000000" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      paymentMethod: "CASH",
+      clientInvoiceId: "offline-invoice-1779012000000",
+      items: [{ productId: "product-1", quantity: 2 }],
+    });
+  });
+
+  it("omits clientInvoiceId for regular online invoice creation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      id: "server-invoice-2",
+      number: 34,
+      total: "10",
+      paid: "10",
+      remaining: "0",
+      items: [],
+      paymentMethod: "CASH",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createInvoice({
+      items: [{
+        productId: "product-2",
+        productName: "Sugar",
+        barcode: "456",
+        price: 10,
+        wholesalePrice: 8,
+        quantity: 1,
+        total: 10,
+      }],
+      paymentMethod: "cash",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("clientInvoiceId");
   });
 });

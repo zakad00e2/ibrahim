@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteCustomer, getCustomerById } from "./customersApi";
+import { createCustomer, deleteCustomer, getCustomerById } from "./customersApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -72,5 +72,50 @@ describe("customersApi", () => {
         payments: [{ amount: 40.1 }],
       }],
     });
+  });
+
+  it("includes clientCustomerId when provided for offline queue customer creation", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({
+        id: "server-customer-1",
+        name: "Ibrahim",
+        phone: "010",
+        debts: [],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await createCustomer(
+      { name: " Ibrahim ", phone: "010" },
+      { clientCustomerId: "offline-customer-1779012000000" },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      name: "Ibrahim",
+      phone: "010",
+      clientCustomerId: "offline-customer-1779012000000",
+    });
+  });
+
+  it("omits clientCustomerId for regular online customer creation", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({
+        id: "server-customer-2",
+        name: "Ahmed",
+        phone: "011",
+        debts: [],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await createCustomer({ name: "Ahmed", phone: "011" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("clientCustomerId");
   });
 });

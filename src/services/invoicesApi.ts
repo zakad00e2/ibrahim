@@ -217,6 +217,10 @@ export type ListInvoicesParams = {
   limit?: number;
 };
 
+export type CreateInvoiceOptions = {
+  clientInvoiceId?: string;
+};
+
 const buildQuery = (params: ListInvoicesParams): string => {
   const entries: string[] = [];
   if (params.search !== undefined && params.search !== "") {
@@ -247,11 +251,15 @@ export const getInvoiceByNumber = async (number: string): Promise<Invoice> => {
   return invoiceFromResponse(payload);
 };
 
-export const createInvoice = async (request: SaleRequest): Promise<Invoice> => {
+export const createInvoice = async (
+  request: SaleRequest,
+  options: CreateInvoiceOptions = {},
+): Promise<Invoice> => {
   const body = {
     paymentMethod: paymentMethodMap[request.paymentMethod],
     customerId: request.customerId,
     paid: request.paymentMethod === "partial" ? request.paidAmount : undefined,
+    clientInvoiceId: options.clientInvoiceId,
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
