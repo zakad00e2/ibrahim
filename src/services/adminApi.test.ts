@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { approveAdminStore, listAdminStores, listAdminUsers } from "./adminApi";
+import {
+  approveAdminStore,
+  listAdminStores,
+  listAdminUsers,
+  reactivateAdminStore,
+  suspendAdminStore,
+} from "./adminApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -75,6 +81,50 @@ describe("adminApi", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/admin/stores/70d02f0b-ed34-4149-84f8-4ea212fca07d/approve",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+  });
+
+  it("suspends an active store by id", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({ message: "Store suspended." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(suspendAdminStore("70d02f0b-ed34-4149-84f8-4ea212fca07d")).resolves.toEqual({
+      message: "Store suspended.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/stores/70d02f0b-ed34-4149-84f8-4ea212fca07d/suspend",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+  });
+
+  it("reactivates a suspended store by id", async () => {
+    const fetchMock = mockFetch(
+      new Response(JSON.stringify({ message: "Store reactivated." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(reactivateAdminStore("70d02f0b-ed34-4149-84f8-4ea212fca07d")).resolves.toEqual({
+      message: "Store reactivated.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/stores/70d02f0b-ed34-4149-84f8-4ea212fca07d/reactivate",
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

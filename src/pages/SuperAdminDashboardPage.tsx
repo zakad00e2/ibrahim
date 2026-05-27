@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Ban,
   CheckCircle2,
   LogOut,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Store,
   UserCheck,
@@ -11,10 +13,16 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { StatusBadge } from "../components/StatusBadge";
-import { approveAdminStore, listAdminStores, listAdminUsers } from "../services/adminApi";
+import {
+  approveAdminStore,
+  listAdminStores,
+  listAdminUsers,
+  reactivateAdminStore,
+  suspendAdminStore,
+} from "../services/adminApi";
 import { useAuthStore } from "../store/AuthStore";
 import type { AdminStore, AdminUser } from "../types";
-import { formatDate, formatNumber, toArabicDigits } from "../utils/formatCurrency";
+import { formatDate, formatNumber } from "../utils/formatCurrency";
 
 type BadgeTone = "success" | "warning" | "danger" | "neutral" | "info";
 
@@ -26,6 +34,14 @@ type AdminStatusMeta = {
 type AdminDashboardMessage = {
   type: "success" | "error";
   text: string;
+};
+
+type AdminStoreStatusActionMeta = {
+  kind: "suspend" | "reactivate";
+  label: string;
+  pendingLabel: string;
+  buttonVariant: "danger" | "success";
+  errorFallback: string;
 };
 
 export const getAdminStoreStatusMeta = (status: string): AdminStatusMeta => {
@@ -52,6 +68,52 @@ export const getSuperAdminStoreStats = (stores: AdminStore[]) => ({
   totalCustomers: stores.reduce((sum, store) => sum + store.counts.customers, 0),
 });
 
+export const getAdminStoreStatusActionMeta = (status: string): AdminStoreStatusActionMeta => {
+  if (status === "SUSPENDED") {
+    return {
+      kind: "reactivate",
+      label: "إعادة تفعيل",
+      pendingLabel: "جار التفعيل",
+      buttonVariant: "success",
+      errorFallback: "تعذر إعادة تفعيل المتجر.",
+    };
+  }
+
+  return {
+    kind: "suspend",
+    label: "تعليق",
+    pendingLabel: "جار التعليق",
+    buttonVariant: "danger",
+    errorFallback: "تعذر تعليق المتجر.",
+  };
+};
+
+export const getAdminStoreApproveActionLabel = (status: string, isLoading: boolean) => {
+  if (isLoading) {
+    return "جار الموافقة";
+  }
+
+  if (status === "PENDING") {
+    return "موافقة";
+  }
+
+  if (status === "APPROVED") {
+    return "معتمد";
+  }
+
+  return getAdminStoreStatusMeta(status).label;
+};
+
+export const adminStoreActionHeaderClass = "sticky left-0 z-20 min-w-[20rem] bg-zinc-50 px-4 py-3 font-medium";
+
+export const getAdminStoreActionCellClass = (isSelected: boolean) =>
+  [
+    "sticky left-0 z-10 min-w-[20rem] px-4 py-3",
+    isSelected ? "bg-emerald-50" : "bg-white",
+  ].join(" ");
+
+export const adminInlineUsersCellClass = "bg-emerald-50/35 px-4 py-4";
+
 const sortStores = (stores: AdminStore[]) =>
   [...stores].sort((a, b) => {
     if (a.status === "PENDING" && b.status !== "PENDING") return -1;
@@ -59,6 +121,9 @@ const sortStores = (stores: AdminStore[]) =>
 
     return Date.parse(b.createdAt || "") - Date.parse(a.createdAt || "");
   });
+
+export const getNextSelectedAdminStoreId = (currentStoreId: string, stores: AdminStore[]) =>
+  currentStoreId && stores.some((store) => store.id === currentStoreId) ? currentStoreId : "";
 
 const displayDate = (value: string) => {
   if (!value) {
@@ -72,6 +137,80 @@ const displayDate = (value: string) => {
   }
 };
 
+type AdminInlineStoreUsersPanelProps = {
+  store: AdminStore;
+  users: AdminUser[];
+  usersLoading: boolean;
+  usersError: string | null;
+};
+
+export function AdminInlineStoreUsersPanel({
+  store,
+  users,
+  usersLoading,
+  usersError,
+}: AdminInlineStoreUsersPanelProps) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <UserCheck className="h-5 w-5 text-emerald-700" />
+          <div>
+            <h3 className="text-base font-medium text-zinc-950">مستخدمو المتجر</h3>
+            <p className="text-sm font-normal text-zinc-500" dir="ltr">
+              {store.name}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {usersError ? (
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{usersError}</div>
+      ) : null}
+
+      {usersLoading ? (
+        <div className="py-6 text-center text-sm font-normal text-zinc-500">جار تحميل المستخدمين...</div>
+      ) : users.length === 0 ? (
+        <div className="py-6 text-center text-sm font-normal text-zinc-500">لا يوجد مستخدمون لهذا المتجر</div>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+          {users.map((user) => (
+            <div key={user.id} className="rounded-lg border border-emerald-100 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-zinc-950" dir="ltr">
+                    {user.username}
+                  </p>
+                  <p className="mt-1 truncate text-xs font-normal text-zinc-500" dir="ltr">
+                    {user.email ?? "-"}
+                  </p>
+                </div>
+                <StatusBadge tone={user.isActive ? "success" : "danger"} size="sm">
+                  {user.isActive ? "نشط" : "معطل"}
+                </StatusBadge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600">
+                <div>
+                  <span className="block text-zinc-400">الدور</span>
+                  <span className="font-medium">{user.role}</span>
+                </div>
+                <div>
+                  <span className="block text-zinc-400">البريد</span>
+                  <span className="font-medium">{user.isEmailVerified ? "مؤكد" : "غير مؤكد"}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="block text-zinc-400">تاريخ الإنشاء</span>
+                  <span className="font-medium">{displayDate(user.createdAt)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SuperAdminDashboardPage() {
   const navigate = useNavigate();
   const { logout, session } = useAuthStore();
@@ -81,16 +220,13 @@ export function SuperAdminDashboardPage() {
   const [storesLoading, setStoresLoading] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
   const [approvingStoreId, setApprovingStoreId] = useState<string | null>(null);
+  const [statusActionStoreId, setStatusActionStoreId] = useState<string | null>(null);
   const [storesError, setStoresError] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [message, setMessage] = useState<AdminDashboardMessage | null>(null);
 
   const sortedStores = useMemo(() => sortStores(stores), [stores]);
   const stats = useMemo(() => getSuperAdminStoreStats(stores), [stores]);
-  const selectedStore = useMemo(
-    () => stores.find((store) => store.id === selectedStoreId) ?? null,
-    [selectedStoreId, stores],
-  );
 
   const loadStores = useCallback(async () => {
     setStoresLoading(true);
@@ -99,13 +235,7 @@ export function SuperAdminDashboardPage() {
     try {
       const nextStores = await listAdminStores();
       setStores(nextStores);
-      setSelectedStoreId((current) => {
-        if (current && nextStores.some((store) => store.id === current)) {
-          return current;
-        }
-
-        return sortStores(nextStores)[0]?.id ?? "";
-      });
+      setSelectedStoreId((current) => getNextSelectedAdminStoreId(current, nextStores));
     } catch (err) {
       setStoresError(err instanceof Error ? err.message : "تعذر تحميل المتاجر.");
     } finally {
@@ -150,6 +280,14 @@ export function SuperAdminDashboardPage() {
     };
   }, [selectedStoreId]);
 
+  const refreshStoreData = async (storeId: string) => {
+    await loadStores();
+    if (selectedStoreId === storeId) {
+      const nextUsers = await listAdminUsers(storeId);
+      setUsers(nextUsers);
+    }
+  };
+
   const handleApprove = async (store: AdminStore) => {
     setApprovingStoreId(store.id);
     setMessage(null);
@@ -157,11 +295,7 @@ export function SuperAdminDashboardPage() {
     try {
       const result = await approveAdminStore(store.id);
       setMessage({ type: "success", text: result.message });
-      await loadStores();
-      if (selectedStoreId === store.id) {
-        const nextUsers = await listAdminUsers(store.id);
-        setUsers(nextUsers);
-      }
+      await refreshStoreData(store.id);
     } catch (err) {
       setMessage({
         type: "error",
@@ -169,6 +303,26 @@ export function SuperAdminDashboardPage() {
       });
     } finally {
       setApprovingStoreId(null);
+    }
+  };
+
+  const handleStoreStatusAction = async (store: AdminStore) => {
+    const action = getAdminStoreStatusActionMeta(store.status);
+    setStatusActionStoreId(store.id);
+    setMessage(null);
+
+    try {
+      const result =
+        action.kind === "reactivate" ? await reactivateAdminStore(store.id) : await suspendAdminStore(store.id);
+      setMessage({ type: "success", text: result.message });
+      await refreshStoreData(store.id);
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : action.errorFallback,
+      });
+    } finally {
+      setStatusActionStoreId(null);
     }
   };
 
@@ -252,8 +406,7 @@ export function SuperAdminDashboardPage() {
           </div>
         ) : null}
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(22rem,0.85fr)]">
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
             <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Store className="h-5 w-5 text-brand-600" />
@@ -285,7 +438,7 @@ export function SuperAdminDashboardPage() {
                       <th className="px-4 py-3 font-medium">المنتجات</th>
                       <th className="px-4 py-3 font-medium">العملاء</th>
                       <th className="px-4 py-3 font-medium">تاريخ الإنشاء</th>
-                      <th className="px-4 py-3 font-medium">إجراءات</th>
+                      <th className={adminStoreActionHeaderClass}>إجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
@@ -298,55 +451,87 @@ export function SuperAdminDashboardPage() {
                     ) : (
                       sortedStores.map((store) => {
                         const status = getAdminStoreStatusMeta(store.status);
+                        const statusAction = getAdminStoreStatusActionMeta(store.status);
                         const isSelected = store.id === selectedStoreId;
                         const canApprove = store.status === "PENDING";
+                        const isApproveLoading = approvingStoreId === store.id;
+                        const isStatusActionLoading = statusActionStoreId === store.id;
 
                         return (
-                          <tr key={store.id} className={isSelected ? "bg-emerald-50/45" : undefined}>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                className="text-right font-medium text-zinc-950 transition hover:text-brand-700"
-                                onClick={() => setSelectedStoreId(store.id)}
-                              >
-                                {store.name}
-                              </button>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-zinc-600" dir="ltr">
-                              {store.subdomain}
-                            </td>
-                            <td className="px-4 py-3 font-medium text-zinc-600">{store.plan}</td>
-                            <td className="px-4 py-3">
-                              <StatusBadge tone={status.tone} size="sm">
-                                {status.label}
-                              </StatusBadge>
-                            </td>
-                            <td className="px-4 py-3 font-medium">{formatNumber(store.counts.users)}</td>
-                            <td className="px-4 py-3 font-medium">{formatNumber(store.counts.products)}</td>
-                            <td className="px-4 py-3 font-medium">{formatNumber(store.counts.customers)}</td>
-                            <td className="px-4 py-3 text-zinc-600">{displayDate(store.createdAt)}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant={isSelected ? "primary" : "secondary"}
-                                  icon={<UsersRound className="h-4 w-4" />}
+                          <Fragment key={store.id}>
+                            <tr className={isSelected ? "bg-emerald-50/45" : undefined}>
+                              <td className="px-4 py-3">
+                                <button
+                                  type="button"
+                                  className="text-right font-medium text-zinc-950 transition hover:text-brand-700"
                                   onClick={() => setSelectedStoreId(store.id)}
                                 >
-                                  المستخدمون
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant={canApprove ? "success" : "secondary"}
-                                  disabled={!canApprove || approvingStoreId === store.id}
-                                  icon={<CheckCircle2 className="h-4 w-4" />}
-                                  onClick={() => void handleApprove(store)}
-                                >
-                                  {approvingStoreId === store.id ? "جار الموافقة" : canApprove ? "موافقة" : "معتمد"}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
+                                  {store.name}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 font-medium text-zinc-600" dir="ltr">
+                                {store.subdomain}
+                              </td>
+                              <td className="px-4 py-3 font-medium text-zinc-600">{store.plan}</td>
+                              <td className="px-4 py-3">
+                                <StatusBadge tone={status.tone} size="sm">
+                                  {status.label}
+                                </StatusBadge>
+                              </td>
+                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.users)}</td>
+                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.products)}</td>
+                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.customers)}</td>
+                              <td className="px-4 py-3 text-zinc-600">{displayDate(store.createdAt)}</td>
+                              <td className={getAdminStoreActionCellClass(isSelected)}>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant={isSelected ? "primary" : "secondary"}
+                                    icon={<UsersRound className="h-4 w-4" />}
+                                    onClick={() => setSelectedStoreId((current) => (current === store.id ? "" : store.id))}
+                                  >
+                                    المستخدمون
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={canApprove ? "success" : "secondary"}
+                                    disabled={!canApprove || isApproveLoading || isStatusActionLoading}
+                                    icon={<CheckCircle2 className="h-4 w-4" />}
+                                    onClick={() => void handleApprove(store)}
+                                  >
+                                    {getAdminStoreApproveActionLabel(store.status, isApproveLoading)}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={statusAction.buttonVariant}
+                                    disabled={isStatusActionLoading || isApproveLoading}
+                                    icon={
+                                      statusAction.kind === "reactivate" ? (
+                                        <RotateCcw className="h-4 w-4" />
+                                      ) : (
+                                        <Ban className="h-4 w-4" />
+                                      )
+                                    }
+                                    onClick={() => void handleStoreStatusAction(store)}
+                                  >
+                                    {isStatusActionLoading ? statusAction.pendingLabel : statusAction.label}
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                            {isSelected ? (
+                              <tr>
+                                <td colSpan={9} className={adminInlineUsersCellClass}>
+                                  <AdminInlineStoreUsersPanel
+                                    store={store}
+                                    users={users}
+                                    usersError={usersError}
+                                    usersLoading={usersLoading}
+                                  />
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
                         );
                       })
                     )}
@@ -354,69 +539,6 @@ export function SuperAdminDashboardPage() {
                 </table>
               )}
             </div>
-          </div>
-
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-            <div className="border-b border-zinc-100 p-4">
-              <div className="flex items-center gap-2">
-                <UserCheck className="h-5 w-5 text-emerald-700" />
-                <div>
-                  <h2 className="text-lg font-medium text-zinc-950">المستخدمون</h2>
-                  <p className="text-sm font-normal text-zinc-500">
-                    {selectedStore ? selectedStore.name : "اختر متجرًا لعرض المستخدمين"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {usersError ? (
-              <div className="mx-4 mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                {usersError}
-              </div>
-            ) : null}
-
-            {usersLoading ? (
-              <div className="py-12 text-center text-sm font-normal text-zinc-500">جار تحميل المستخدمين...</div>
-            ) : users.length === 0 ? (
-              <div className="px-4 py-12 text-center text-sm font-normal text-zinc-500">
-                لا يوجد مستخدمون لهذا المتجر
-              </div>
-            ) : (
-              <div className="divide-y divide-zinc-100">
-                {users.map((user) => (
-                  <div key={user.id} className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-950" dir="ltr">
-                          {user.username}
-                        </p>
-                        <p className="mt-1 truncate text-xs font-normal text-zinc-500" dir="ltr">
-                          {user.email ?? "-"}
-                        </p>
-                      </div>
-                      <StatusBadge tone={user.isActive ? "success" : "danger"} size="sm">
-                        {user.isActive ? "نشط" : "معطل"}
-                      </StatusBadge>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-600">
-                      <div>
-                        <span className="block text-zinc-400">الدور</span>
-                        <span className="font-medium">{user.role}</span>
-                      </div>
-                      <div>
-                        <span className="block text-zinc-400">البريد</span>
-                        <span className="font-medium">{user.isEmailVerified ? "مؤكد" : "غير مؤكد"}</span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="block text-zinc-400">تاريخ الإنشاء</span>
-                        <span className="font-medium">{displayDate(user.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </section>
       </div>
     </main>

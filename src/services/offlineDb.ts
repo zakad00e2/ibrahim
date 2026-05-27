@@ -129,6 +129,10 @@ type OfflineOperationMetadata = {
   id?: number;
   storeKey?: string;
   createdAt: string;
+  clientOperationId?: string;
+  ownerSessionKey?: string;
+  status?: "pending" | "in-flight";
+  inFlightAt?: string;
 };
 
 export type OfflineOperation =
@@ -144,11 +148,11 @@ export type OfflineOperation =
     })
   | (OfflineOperationMetadata & {
       type: "payCustomerDebt";
-      payload: { customerId: string; amount: number; notes?: string };
+      payload: { customerId: string; amount: number; notes?: string; clientOperationId?: string };
     })
   | (OfflineOperationMetadata & {
       type: "payDebt";
-      payload: { debtId: string; amount: number; notes?: string };
+      payload: { debtId: string; amount: number; notes?: string; clientOperationId?: string };
     });
 
 export type QueueOfflineOperationInput =
@@ -242,6 +246,21 @@ class CashierOfflineDb extends Dexie {
         invoice.storeKey = storeKey;
         invoice.invoiceId = invoiceId;
         invoice.id = buildInvoiceCacheId(storeKey, invoiceId);
+      });
+    });
+
+    this.version(5).stores({
+      products: "id, storeKey, productId, [storeKey+productId], [storeKey+barcode], name, isActive, stock",
+      customers: "id, storeKey, customerId, [storeKey+customerId], name, phone",
+      invoices: "id, storeKey, invoiceId, [storeKey+invoiceId], number, date, customerId",
+      debts: "id, storeKey, debtId, customerId, [storeKey+debtId], [storeKey+customerId], invoiceId, date, remaining, isPaid",
+      offlineQueue: "++id, storeKey, ownerSessionKey, status, clientOperationId, type, createdAt",
+    }).upgrade(async (transaction) => {
+      await transaction.table<OfflineOperation, number>("offlineQueue").toCollection().modify((operation) => {
+        operation.status = operation.status ?? "pending";
+        operation.clientOperationId = operation.clientOperationId ?? (
+          "localId" in operation ? operation.localId : undefined
+        );
       });
     });
   }
@@ -474,6 +493,7 @@ export const queueCachedOfflineCustomerCreation = async (
   storeKey: string,
   input: CustomerInput,
   customer: Customer,
+  ownerSessionKey?: string,
 ): Promise<QueueCachedOfflineCustomerCreationResult> => {
   const normalizedStoreKey = normalizeStoreKey(storeKey);
   const inputIdentity = normalizeCustomerIdentity(input);
@@ -507,7 +527,10 @@ export const queueCachedOfflineCustomerCreation = async (
           type: "createCustomer",
           payload: input,
           localId: existingCustomer.id,
+          clientOperationId: existingCustomer.id,
+          ownerSessionKey,
           storeKey: normalizedStoreKey,
+          status: "pending",
           createdAt: new Date().toISOString(),
         });
       }
@@ -519,7 +542,10 @@ export const queueCachedOfflineCustomerCreation = async (
       type: "createCustomer",
       payload: input,
       localId: customer.id,
+      clientOperationId: customer.id,
+      ownerSessionKey,
       storeKey: normalizedStoreKey,
+      status: "pending",
       createdAt: new Date().toISOString(),
     });
     await offlineDb.customers.put(toCachedCustomer(normalizedStoreKey, customer));
@@ -729,31 +755,91 @@ export async function queueOfflineOperation(
   maybeOperation?: QueueOfflineOperationInput,
 ): Promise<number> {
   const { storeKey, operation } = resolveOfflineOperationArgs(storeKeyOrOperation, maybeOperation);
+  const payloadClientOperationId =
+    "payload" in operation &&
+    typeof operation.payload === "object" &&
+    operation.payload !== null &&
+    "clientOperationId" in operation.payload &&
+    typeof operation.payload.clientOperationId === "string"
+      ? operation.payload.clientOperationId
+      : undefined;
+  const localOperationId = "localId" in operation ? operation.localId : undefined;
+  const clientOperationId = operation.clientOperationId ?? localOperationId ?? payloadClientOperationId;
 
   return offlineDb.offlineQueue.add({
     ...operation,
     storeKey,
+    clientOperationId,
+    status: operation.status ?? "pending",
     createdAt: operation.createdAt ?? new Date().toISOString(),
   } as OfflineOperation);
 }
 
-export const listOfflineOperations = async (storeKey?: string): Promise<OfflineOperation[]> => {
+export const listOfflineOperations = async (storeKey?: string, ownerSessionKey?: string): Promise<OfflineOperation[]> => {
+  const isPending = (operation: OfflineOperation) =>
+    (operation.status ?? "pending") === "pending" &&
+    (ownerSessionKey === undefined || operation.ownerSessionKey === ownerSessionKey);
+
   if (storeKey === undefined) {
-    return offlineDb.offlineQueue.orderBy("createdAt").toArray();
+    return (await offlineDb.offlineQueue.orderBy("createdAt").toArray()).filter(isPending);
   }
 
-  return offlineDb.offlineQueue.where("storeKey").equals(normalizeStoreKey(storeKey)).sortBy("createdAt");
+  return (await offlineDb.offlineQueue.where("storeKey").equals(normalizeStoreKey(storeKey)).sortBy("createdAt"))
+    .filter(isPending);
 };
 
-export const hasOfflineOperations = async (storeKey?: string): Promise<boolean> => {
-  const operation = storeKey === undefined
-    ? await offlineDb.offlineQueue.orderBy("createdAt").first()
-    : await offlineDb.offlineQueue.where("storeKey").equals(normalizeStoreKey(storeKey)).first();
-  return operation !== undefined;
+export const hasOfflineOperations = async (storeKey?: string, ownerSessionKey?: string): Promise<boolean> => {
+  const operations = await listOfflineOperations(storeKey, ownerSessionKey);
+  return operations.length > 0;
 };
 
-export const deleteOfflineOperation = async (id: number): Promise<void> => {
-  await offlineDb.offlineQueue.delete(id);
+export const deleteOfflineOperation = async (id: number, storeKey?: string): Promise<void> => {
+  if (storeKey === undefined) {
+    await offlineDb.offlineQueue.delete(id);
+    return;
+  }
+
+  const operation = await offlineDb.offlineQueue.get(id);
+  if (operation?.storeKey === normalizeStoreKey(storeKey)) {
+    await offlineDb.offlineQueue.delete(id);
+  }
+};
+
+export const markOfflineOperationInFlight = async (id: number): Promise<void> => {
+  await offlineDb.offlineQueue.update(id, {
+    status: "in-flight",
+    inFlightAt: new Date().toISOString(),
+  });
+};
+
+export const recoverInFlightOfflineOperations = async (storeKey?: string): Promise<void> => {
+  const operations = storeKey === undefined
+    ? await offlineDb.offlineQueue.where("status").equals("in-flight").toArray()
+    : await offlineDb.offlineQueue
+        .where("storeKey")
+        .equals(normalizeStoreKey(storeKey))
+        .filter((operation) => operation.status === "in-flight")
+        .toArray();
+
+  if (operations.length === 0) return;
+
+  await offlineDb.offlineQueue.bulkPut(
+    operations.map((operation) => ({
+      ...operation,
+      status: "pending" as const,
+      inFlightAt: undefined,
+    })),
+  );
+};
+
+export const clearOfflineData = async (): Promise<void> => {
+  await Promise.all([
+    offlineDb.products.clear(),
+    offlineDb.customers.clear(),
+    offlineDb.invoices.clear(),
+    offlineDb.debts.clear(),
+    offlineDb.offlineQueue.clear(),
+  ]);
 };
 
 export function replaceOfflineCustomerIdInQueuedOperations(

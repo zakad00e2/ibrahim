@@ -250,4 +250,49 @@ describe("offlineSync", () => {
     expect(processed).toEqual(["createCustomer", "createInvoice"]);
     expect(deleted).toEqual([1]);
   });
+
+  it("marks queued writes in-flight before sending and leaves failed mutations queued", async () => {
+    const operations: OfflineOperation[] = [
+      {
+        id: 7,
+        type: "payDebt",
+        payload: {
+          debtId: "d1",
+          amount: 25,
+          clientOperationId: "payment-op-7",
+        },
+        clientOperationId: "payment-op-7",
+        createdAt: "2026-05-17T10:00:00.000Z",
+      },
+    ];
+    const marked: number[] = [];
+    const deleted: number[] = [];
+    const recovered: string[] = [];
+
+    const result = await drainOfflineQueue({
+      recoverInFlightOperations: async () => {
+        recovered.push("called");
+      },
+      listOperations: async () => operations,
+      markOperationInFlight: async (id) => {
+        marked.push(id);
+      },
+      processOperation: async () => {
+        throw new TypeError("Failed to fetch after server mutation");
+      },
+      deleteOperation: async (id) => {
+        deleted.push(id);
+      },
+    });
+
+    expect(result).toMatchObject({
+      processedAny: false,
+      drained: false,
+      wentOffline: true,
+      failedOperation: operations[0],
+    });
+    expect(recovered).toEqual(["called"]);
+    expect(marked).toEqual([7]);
+    expect(deleted).toEqual([]);
+  });
 });

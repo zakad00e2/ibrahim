@@ -114,6 +114,26 @@ export const approveAdminStore = async (storeId: string): Promise<{ message: str
   return { message: "تمت الموافقة على المتجر بنجاح." };
 };
 
+export const suspendAdminStore = async (storeId: string): Promise<{ message: string }> => {
+  const payload = await patchJson(`/api/admin/stores/${encodeURIComponent(storeId)}/suspend`, {});
+
+  if (isRecord(payload) && typeof payload.message === "string") {
+    return { message: payload.message };
+  }
+
+  return { message: "تم تعليق المتجر وسيتم طرد المستخدمين المسجلين." };
+};
+
+export const reactivateAdminStore = async (storeId: string): Promise<{ message: string }> => {
+  const payload = await patchJson(`/api/admin/stores/${encodeURIComponent(storeId)}/reactivate`, {});
+
+  if (isRecord(payload) && typeof payload.message === "string") {
+    return { message: payload.message };
+  }
+
+  return { message: "تمت إعادة تفعيل المتجر." };
+};
+
 export const listAdminUsers = async (storeId?: string): Promise<AdminUser[]> => {
   const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : "";
   const payload = await getJson(`/api/admin/users${query}`);

@@ -57,8 +57,10 @@ import {
   listCachedInvoices,
   listCachedProducts,
   listOfflineOperations,
+  markOfflineOperationInFlight,
   queueCachedOfflineCustomerCreation,
   queueOfflineOperation,
+  recoverInFlightOfflineOperations,
   replaceOfflineCustomerIdInQueuedOperations,
   upsertCachedCustomers,
   upsertCachedDebts,
@@ -246,6 +248,22 @@ const productMatchesQuery = (product: Product, query: ProductsQuery): boolean =>
   return matchesActiveState && matchesSearch;
 };
 
+const getSessionOwnerKey = (session: AuthSession | null): string | undefined => {
+  if (!session?.token) return undefined;
+
+  if (session.user.id) return `user:${session.user.id}`;
+  if (session.user.username) return `username:${session.user.username}`;
+  if (session.user.email) return `email:${session.user.email}`;
+  return session.user.storeId ? `store:${session.user.storeId}` : undefined;
+};
+
+const createClientOperationId = (prefix: string): string => {
+  const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+  return `${prefix}-${Date.now()}-${randomId}`;
+};
+
 const findCachedOfflineCustomerId = async (storeCacheKey: string, input: CustomerInput): Promise<string | undefined> => {
   const cached = await listCachedCustomers(storeCacheKey, { page: 1, limit: Number.MAX_SAFE_INTEGER });
   const name = input.name.trim();
@@ -261,6 +279,7 @@ const findCachedOfflineCustomerId = async (storeCacheKey: string, input: Custome
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const { session } = useAuthStore();
   const storeCacheKey = useMemo(() => getSessionStoreCacheKey(session), [session]);
+  const queueOwnerKey = useMemo(() => getSessionOwnerKey(session), [session]);
   const isStoreSession = storeCacheKey !== null;
   const [isOffline, setIsOffline] = useState(() => !getBrowserOnlineState());
   const isOfflineRef = useRef(isOffline);
@@ -733,7 +752,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
         const draft = buildOfflineCustomer(input);
-        const { customer: saved, created } = await queueCachedOfflineCustomerCreation(storeCacheKey, input, draft);
+        const { customer: saved, created } = await queueCachedOfflineCustomerCreation(
+          storeCacheKey,
+          input,
+          draft,
+          queueOwnerKey,
+        );
         mergeCustomerIntoCurrentPage(saved);
         if (created) setCustomersTotal((current) => current + 1);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: saved.id };
@@ -758,7 +782,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة العميل." };
       }
     },
-    [fetchCustomers, mergeCustomerIntoCurrentPage, storeCacheKey],
+    [fetchCustomers, mergeCustomerIntoCurrentPage, queueOwnerKey, storeCacheKey],
   );
 
   const updateCustomer = useCallback(
@@ -812,9 +836,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (compareMoney(amount, totalDebt) === 1) return { ok: false, message: "مبلغ التسديد أكبر من إجمالي الدين" };
 
       const optimisticCustomers = applyCustomerDebtPayment(customers, customerId, amount);
+      const clientOperationId = createClientOperationId("pay-customer-debt");
 
       if (isOfflineRef.current || !getBrowserOnlineState()) {
-        await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
+        await queueOfflineOperation(storeCacheKey, {
+          type: "payCustomerDebt",
+          payload: { customerId, amount, notes, clientOperationId },
+          clientOperationId,
+          ownerSessionKey: queueOwnerKey,
+        });
         setCustomers(optimisticCustomers);
         await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE };
@@ -823,7 +853,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setCustomers(optimisticCustomers);
 
       try {
-        const summary = await payCustomerDebtAuto(customerId, amount, notes);
+        const summary = await payCustomerDebtAuto(customerId, amount, notes, { clientOperationId });
         await cacheCustomerDebts(storeCacheKey, customerId, summary.debts, summary.totalRemaining);
         setCustomers((current) =>
           current.map((c) =>
@@ -834,7 +864,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
-          await queueOfflineOperation(storeCacheKey, { type: "payCustomerDebt", payload: { customerId, amount, notes } });
+          await queueOfflineOperation(storeCacheKey, {
+            type: "payCustomerDebt",
+            payload: { customerId, amount, notes, clientOperationId },
+            clientOperationId,
+            ownerSessionKey: queueOwnerKey,
+          });
           await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE };
         }
@@ -853,7 +888,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل التسديد." };
       }
     },
-    [customers, storeCacheKey],
+    [customers, queueOwnerKey, storeCacheKey],
   );
 
   const payDebt = useCallback(
@@ -877,16 +912,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
 
       const optimisticCustomers = applyDebtPayment(customers, debtId, amount);
+      const clientOperationId = createClientOperationId("pay-debt");
 
       if (isOfflineRef.current || !getBrowserOnlineState()) {
-        await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
+        await queueOfflineOperation(storeCacheKey, {
+          type: "payDebt",
+          payload: { debtId, amount, notes, clientOperationId },
+          clientOperationId,
+          ownerSessionKey: queueOwnerKey,
+        });
         setCustomers(optimisticCustomers);
         await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
       }
 
       try {
-        const updatedDebt = await apiPayDebt(debtId, amount, notes);
+        const updatedDebt = await apiPayDebt(debtId, amount, notes, { clientOperationId });
         await upsertCachedDebts(storeCacheKey, [{ ...updatedDebt, customerId: customerWithDebt?.id }]);
         if (customerWithDebt) {
           const nextCustomers = customers.map((c) => {
@@ -901,7 +942,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
-          await queueOfflineOperation(storeCacheKey, { type: "payDebt", payload: { debtId, amount, notes } });
+          await queueOfflineOperation(storeCacheKey, {
+            type: "payDebt",
+            payload: { debtId, amount, notes, clientOperationId },
+            clientOperationId,
+            ownerSessionKey: queueOwnerKey,
+          });
           setCustomers(optimisticCustomers);
           await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
@@ -909,7 +955,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل الدفعة." };
       }
     },
-    [customers, storeCacheKey],
+    [customers, queueOwnerKey, storeCacheKey],
   );
 
   const loadDebtDetail = useCallback(async (debtId: string): Promise<Debt | null> => {
@@ -990,12 +1036,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       });
       if (unavailable) return { ok: false, message: `الكمية المتوفرة من ${unavailable.productName} غير كافية` };
 
+      const clientInvoiceId = createClientOperationId("offline-invoice");
       const persistOfflineSale = async (): Promise<ActionResult> => {
-        const invoice = buildOfflineInvoice(request, products, customer);
+        const invoice = buildOfflineInvoice(request, products, customer, new Date(), clientInvoiceId);
         const nextProducts = applyOfflineSaleToProducts(products, invoice.items);
         let nextCustomers = customers;
 
-        await queueOfflineOperation(storeCacheKey, { type: "createInvoice", payload: request, localId: invoice.id });
+        await queueOfflineOperation(storeCacheKey, {
+          type: "createInvoice",
+          payload: request,
+          localId: clientInvoiceId,
+          clientOperationId: clientInvoiceId,
+          ownerSessionKey: queueOwnerKey,
+        });
         await upsertCachedInvoices(storeCacheKey, [invoice]);
         await upsertCachedProducts(storeCacheKey, nextProducts);
 
@@ -1027,7 +1080,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       let serverInvoice: Invoice;
       try {
-        serverInvoice = await apiCreateInvoice(request);
+        serverInvoice = await apiCreateInvoice(request, {
+          clientInvoiceId,
+        });
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
@@ -1073,7 +1128,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       void refreshInvoices();
       return { ok: true, message: "تم إتمام البيع بنجاح" };
     },
-    [customers, products, refreshProducts, refreshCustomers, refreshInvoices, storeCacheKey],
+    [customers, products, queueOwnerKey, refreshProducts, refreshCustomers, refreshInvoices, storeCacheKey],
   );
 
   // ── Invoice mutations ────────────────────────────────────────────────────────
@@ -1207,13 +1262,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     try {
       const result = await drainOfflineQueue({
-        listOperations: () => listOfflineOperations(storeCacheKey),
-        deleteOperation: deleteOfflineOperation,
+        recoverInFlightOperations: () => recoverInFlightOfflineOperations(storeCacheKey),
+        listOperations: () => listOfflineOperations(storeCacheKey, queueOwnerKey),
+        markOperationInFlight: markOfflineOperationInFlight,
+        deleteOperation: (id) => deleteOfflineOperation(id, storeCacheKey),
         processOperation: async (operation, customerIdReplacements) => {
           switch (operation.type) {
             case "createInvoice": {
               const payload = resolveOfflineCustomerReference(operation.payload, customerIdReplacements);
-              const saved = await apiCreateInvoice(payload, { clientInvoiceId: operation.localId });
+              const clientInvoiceId = operation.clientOperationId ?? operation.localId;
+              const saved = await apiCreateInvoice(payload, {
+                clientInvoiceId,
+              });
               await upsertCachedInvoices(storeCacheKey, [saved]);
               if (operation.localId) await deleteCachedInvoice(storeCacheKey, operation.localId);
               break;
@@ -1236,11 +1296,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
                 payload.customerId,
                 payload.amount,
                 payload.notes,
+                { clientOperationId: operation.clientOperationId ?? payload.clientOperationId },
               );
               break;
             }
             case "payDebt":
-              await apiPayDebt(operation.payload.debtId, operation.payload.amount, operation.payload.notes);
+              await apiPayDebt(
+                operation.payload.debtId,
+                operation.payload.amount,
+                operation.payload.notes,
+                { clientOperationId: operation.clientOperationId ?? operation.payload.clientOperationId },
+              );
               break;
           }
         },
@@ -1258,7 +1324,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       syncingOfflineQueueRef.current = false;
     }
-  }, [refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts, storeCacheKey]);
+  }, [queueOwnerKey, refreshCustomers, refreshInvoices, refreshLowStock, refreshProducts, storeCacheKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

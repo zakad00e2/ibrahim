@@ -56,8 +56,10 @@ const offlineDbMocks = vi.hoisted(() => ({
   listCachedInvoices: vi.fn(),
   listCachedProducts: vi.fn(),
   listOfflineOperations: vi.fn(),
+  markOfflineOperationInFlight: vi.fn(),
   queueCachedOfflineCustomerCreation: vi.fn(),
   queueOfflineOperation: vi.fn(),
+  recoverInFlightOfflineOperations: vi.fn(),
   replaceOfflineCustomerIdInQueuedOperations: vi.fn(),
   upsertCachedCustomers: vi.fn(),
   upsertCachedDebts: vi.fn(),
@@ -245,6 +247,8 @@ describe("AppStore product actions", () => {
     offlineDbMocks.listCachedCustomers.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
     offlineDbMocks.listCachedInvoices.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 });
     offlineDbMocks.listOfflineOperations.mockResolvedValue([]);
+    offlineDbMocks.markOfflineOperationInFlight.mockResolvedValue(undefined);
+    offlineDbMocks.recoverInFlightOfflineOperations.mockResolvedValue(undefined);
     offlineDbMocks.upsertCachedProducts.mockResolvedValue(undefined);
     offlineDbMocks.upsertCachedCustomers.mockResolvedValue(undefined);
     offlineDbMocks.upsertCachedInvoices.mockResolvedValue(undefined);
@@ -356,5 +360,155 @@ describe("AppStore product actions", () => {
       });
     });
     expect(offlineDbMocks.deleteCachedCustomer).toHaveBeenCalledWith("store:store-1", localId);
+  });
+
+  it("reuses the same client invoice operation id after an ambiguous create failure is queued", async () => {
+    invoiceApiMocks.createInvoice.mockRejectedValue(new TypeError("Failed to fetch"));
+    offlineSyncMocks.isNetworkFailure.mockReturnValue(true);
+    offlineSyncMocks.buildOfflineInvoice.mockReturnValue({
+      ...syncedInvoice,
+      id: "offline-invoice-cached",
+      number: "OFFLINE-CACHED",
+    });
+    offlineSyncMocks.applyOfflineSaleToProducts.mockReturnValue([
+      { ...existingProduct, stock: existingProduct.stock - 1 },
+    ]);
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().products).toEqual([existingProduct]);
+    });
+
+    let result: Awaited<ReturnType<StoreSnapshot["completeSale"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().completeSale(queuedSaleRequest);
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    const [, createOptions] = invoiceApiMocks.createInvoice.mock.calls[0] as [
+      SaleRequest,
+      { clientInvoiceId?: string },
+    ];
+    expect(createOptions.clientInvoiceId).toEqual(expect.stringMatching(/^offline-invoice-/));
+    expect(offlineDbMocks.queueOfflineOperation).toHaveBeenCalledWith(
+      "store:store-1",
+      expect.objectContaining({
+        type: "createInvoice",
+        localId: createOptions.clientInvoiceId,
+        clientOperationId: createOptions.clientInvoiceId,
+      }),
+    );
+  });
+
+  it("reuses the same client payment operation id after an ambiguous customer debt payment failure", async () => {
+    const customerWithDebt: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debtBalance: 50,
+      debts: [{
+        id: "debt-1",
+        invoiceId: "invoice-1",
+        description: "Invoice",
+        date: "2026-05-17T10:00:00.000Z",
+        amount: 50,
+        paid: 0,
+        remaining: 50,
+      }],
+    };
+    customerApiMocks.listCustomers.mockResolvedValue({ items: [customerWithDebt], total: 1, page: 1, limit: 20 });
+    debtApiMocks.payCustomerDebtAuto.mockRejectedValue(new TypeError("Failed to fetch"));
+    offlineSyncMocks.isNetworkFailure.mockReturnValue(true);
+    offlineSyncMocks.applyCustomerDebtPayment.mockReturnValue([
+      { ...customerWithDebt, debtBalance: 25 },
+    ]);
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([customerWithDebt]);
+    });
+
+    let result: Awaited<ReturnType<StoreSnapshot["payCustomerDebt"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().payCustomerDebt("customer-1", 25);
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    const [, , , paymentOptions] = debtApiMocks.payCustomerDebtAuto.mock.calls[0] as [
+      string,
+      number,
+      string | undefined,
+      { clientOperationId?: string },
+    ];
+    expect(paymentOptions.clientOperationId).toEqual(expect.stringMatching(/^pay-customer-debt-/));
+    expect(offlineDbMocks.queueOfflineOperation).toHaveBeenCalledWith(
+      "store:store-1",
+      expect.objectContaining({
+        type: "payCustomerDebt",
+        clientOperationId: paymentOptions.clientOperationId,
+        payload: expect.objectContaining({
+          clientOperationId: paymentOptions.clientOperationId,
+        }),
+      }),
+    );
+  });
+
+  it("reuses the same client payment operation id after an ambiguous individual debt payment failure", async () => {
+    const customerWithDebt: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debtBalance: 50,
+      debts: [{
+        id: "debt-1",
+        invoiceId: "invoice-1",
+        description: "Invoice",
+        date: "2026-05-17T10:00:00.000Z",
+        amount: 50,
+        paid: 0,
+        remaining: 50,
+      }],
+    };
+    customerApiMocks.listCustomers.mockResolvedValue({ items: [customerWithDebt], total: 1, page: 1, limit: 20 });
+    debtApiMocks.payDebt.mockRejectedValue(new TypeError("Failed to fetch"));
+    offlineSyncMocks.isNetworkFailure.mockReturnValue(true);
+    offlineSyncMocks.applyDebtPayment.mockReturnValue([
+      { ...customerWithDebt, debtBalance: 25 },
+    ]);
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([customerWithDebt]);
+    });
+
+    let result: Awaited<ReturnType<StoreSnapshot["payDebt"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().payDebt("debt-1", 25);
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    const [, , , paymentOptions] = debtApiMocks.payDebt.mock.calls[0] as [
+      string,
+      number,
+      string | undefined,
+      { clientOperationId?: string },
+    ];
+    expect(paymentOptions.clientOperationId).toEqual(expect.stringMatching(/^pay-debt-/));
+    expect(offlineDbMocks.queueOfflineOperation).toHaveBeenCalledWith(
+      "store:store-1",
+      expect.objectContaining({
+        type: "payDebt",
+        clientOperationId: paymentOptions.clientOperationId,
+        payload: expect.objectContaining({
+          clientOperationId: paymentOptions.clientOperationId,
+        }),
+      }),
+    );
   });
 });

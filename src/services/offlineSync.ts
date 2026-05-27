@@ -53,6 +53,8 @@ export type OfflineQueueDrainResult = {
 
 export type OfflineQueueDrainOptions = {
   listOperations: () => Promise<OfflineOperation[]>;
+  recoverInFlightOperations?: () => Promise<void>;
+  markOperationInFlight?: (id: number) => Promise<void>;
   processOperation: (
     operation: OfflineOperation,
     customerIdReplacements: Map<string, string>,
@@ -63,10 +65,13 @@ export type OfflineQueueDrainOptions = {
 
 export const drainOfflineQueue = async ({
   listOperations,
+  recoverInFlightOperations,
+  markOperationInFlight,
   processOperation,
   deleteOperation,
   isNetworkError = isNetworkFailure,
 }: OfflineQueueDrainOptions): Promise<OfflineQueueDrainResult> => {
+  await recoverInFlightOperations?.();
   const operations = await listOperations();
   const customerIdReplacements = new Map<string, string>();
   let processedAny = false;
@@ -75,6 +80,7 @@ export const drainOfflineQueue = async ({
     if (!operation.id) continue;
 
     try {
+      await markOperationInFlight?.(operation.id);
       await processOperation(operation, customerIdReplacements);
       await deleteOperation(operation.id);
       processedAny = true;
@@ -116,6 +122,7 @@ export const buildOfflineInvoice = (
   products: Product[],
   customer: Customer | undefined,
   now = new Date(),
+  localId?: string,
 ): Invoice => {
   const items = buildInvoiceItems(request.items, products);
   const total = calculateItemsTotal(items);
@@ -128,7 +135,7 @@ export const buildOfflineInvoice = (
   const timestamp = now.getTime();
 
   return {
-    id: `offline-invoice-${timestamp}`,
+    id: localId ?? `offline-invoice-${timestamp}`,
     number: `OFFLINE-${timestamp}`,
     date: now.toISOString(),
     customerId: request.customerId,

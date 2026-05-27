@@ -4,14 +4,17 @@ import type { Customer, CustomerInput, Invoice, Product, SaleRequest } from "../
 import {
   deleteCachedCustomer,
   deleteCachedInvoice,
+  clearOfflineData,
   listCachedCustomers,
   listCachedInvoices,
   listCachedProducts,
   listOfflineOperations,
   hasOfflineOperations,
+  markOfflineOperationInFlight,
   offlineDb,
   queueCachedOfflineCustomerCreation,
   queueOfflineOperation,
+  recoverInFlightOfflineOperations,
   replaceCachedCustomers,
   replaceCachedInvoices,
   replaceCachedProducts,
@@ -149,6 +152,28 @@ describe("offlineDb", () => {
     expect(saved?.type).toBe("createCustomer");
     expect(saved?.payload).toEqual(customer);
     expect(saved?.createdAt).toEqual(expect.any(String));
+  });
+
+  it("persists durable operation and session metadata for queued writes", async () => {
+    const id = await queueOfflineOperation("store-a", {
+      type: "payDebt",
+      payload: {
+        debtId: "d1",
+        amount: 25,
+        clientOperationId: "payment-op-1",
+      },
+      clientOperationId: "payment-op-1",
+      ownerSessionKey: "user:u1",
+    });
+
+    const saved = await offlineDb.offlineQueue.get(id);
+
+    expect(saved).toMatchObject({
+      storeKey: "store-a",
+      status: "pending",
+      clientOperationId: "payment-op-1",
+      ownerSessionKey: "user:u1",
+    });
   });
 
   it("keeps duplicate offline customer submissions with opening debt as one cached customer and one queued create", async () => {
@@ -320,5 +345,73 @@ describe("offlineDb", () => {
       items: [],
       total: 0,
     });
+  });
+
+  it("recovers in-flight queued writes so a crash can replay them with the same operation id", async () => {
+    const id = await queueOfflineOperation("store-a", {
+      type: "payCustomerDebt",
+      payload: {
+        customerId: "c1",
+        amount: 10,
+        clientOperationId: "customer-payment-op-1",
+      },
+      clientOperationId: "customer-payment-op-1",
+    });
+
+    await markOfflineOperationInFlight(id);
+    expect(await listOfflineOperations("store-a")).toEqual([]);
+
+    await recoverInFlightOfflineOperations("store-a");
+
+    await expect(listOfflineOperations("store-a")).resolves.toMatchObject([
+      {
+        id,
+        status: "pending",
+        inFlightAt: undefined,
+        clientOperationId: "customer-payment-op-1",
+      },
+    ]);
+  });
+
+  it("does not list stale queued writes for a later session owner", async () => {
+    await queueOfflineOperation("store-a", {
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "cash",
+      },
+      clientOperationId: "invoice-op-old",
+      ownerSessionKey: "user:old",
+    });
+
+    await expect(listOfflineOperations("store-a", "user:new")).resolves.toEqual([]);
+    await expect(listOfflineOperations("store-a", "user:old")).resolves.toMatchObject([
+      {
+        clientOperationId: "invoice-op-old",
+        ownerSessionKey: "user:old",
+      },
+    ]);
+  });
+
+  it("clears cached sensitive data and pending writes on logout", async () => {
+    await replaceCachedProducts("store-a", [makeProduct()]);
+    await replaceCachedCustomers("store-a", [makeCustomer()]);
+    await replaceCachedInvoices("store-a", [makeInvoice()]);
+    await queueOfflineOperation("store-a", {
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "cash",
+      },
+      clientOperationId: "invoice-op-1",
+    });
+
+    await clearOfflineData();
+
+    await expect(offlineDb.products.toArray()).resolves.toEqual([]);
+    await expect(offlineDb.customers.toArray()).resolves.toEqual([]);
+    await expect(offlineDb.invoices.toArray()).resolves.toEqual([]);
+    await expect(offlineDb.debts.toArray()).resolves.toEqual([]);
+    await expect(offlineDb.offlineQueue.toArray()).resolves.toEqual([]);
   });
 });

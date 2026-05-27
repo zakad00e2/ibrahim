@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { loginRequest, registerRequest, superAdminLoginRequest } from "../services/authApi";
+import { clearOfflineData } from "../services/offlineDb";
 import type { AuthSession, AuthUser, LoginRequest, RegisterRequest, SuperAdminLoginRequest } from "../types";
 
 type AuthStoreValue = {
@@ -148,6 +149,7 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setError(null);
     clearSession();
+    void clearOfflineData().catch(() => undefined);
   }, []);
 
   const clearError = useCallback(() => {

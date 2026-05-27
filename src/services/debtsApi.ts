@@ -70,13 +70,20 @@ export const getCustomerDebts = async (customerId: string): Promise<DebtSummary>
   return mapDebtSummaryResponse(payload);
 };
 
+export type DebtPaymentOptions = {
+  clientOperationId?: string;
+};
+
 export const payCustomerDebtAuto = async (
   customerId: string,
   amount: number,
   notes?: string,
+  options: DebtPaymentOptions = {},
 ): Promise<DebtSummary> => {
+  // TODO(backend): treat store id plus clientOperationId as an idempotency key for debt payments.
   const body: Record<string, unknown> = { amount };
   if (notes?.trim()) body.notes = notes.trim();
+  if (options.clientOperationId) body.clientOperationId = options.clientOperationId;
   await postJson(`/api/debts/customer/${encodeURIComponent(customerId)}/pay`, body);
   return getCustomerDebts(customerId);
 };
@@ -86,9 +93,16 @@ export const getDebtById = async (id: string): Promise<Debt> => {
   return mapDebtWithPayments(payload);
 };
 
-export const payDebt = async (debtId: string, amount: number, notes?: string): Promise<Debt> => {
+export const payDebt = async (
+  debtId: string,
+  amount: number,
+  notes?: string,
+  options: DebtPaymentOptions = {},
+): Promise<Debt> => {
+  // TODO(backend): treat store id plus clientOperationId as an idempotency key for debt payments.
   const body: Record<string, unknown> = { amount };
   if (notes?.trim()) body.notes = notes.trim();
+  if (options.clientOperationId) body.clientOperationId = options.clientOperationId;
   const payload = await postJson(`/api/debts/${encodeURIComponent(debtId)}/pay`, body);
   return mapDebtWithPayments(payload);
 };

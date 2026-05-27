@@ -219,6 +219,7 @@ export type ListInvoicesParams = {
 
 export type CreateInvoiceOptions = {
   clientInvoiceId?: string;
+  clientOperationId?: string;
 };
 
 const buildQuery = (params: ListInvoicesParams): string => {
@@ -255,11 +256,14 @@ export const createInvoice = async (
   request: SaleRequest,
   options: CreateInvoiceOptions = {},
 ): Promise<Invoice> => {
+  const clientOperationId = options.clientOperationId ?? options.clientInvoiceId;
+  // TODO(backend): dedupe invoice creation by store id plus clientOperationId/clientInvoiceId.
   const body = {
     paymentMethod: paymentMethodMap[request.paymentMethod],
     customerId: request.customerId,
     paid: request.paymentMethod === "partial" ? request.paidAmount : undefined,
     clientInvoiceId: options.clientInvoiceId,
+    clientOperationId,
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,

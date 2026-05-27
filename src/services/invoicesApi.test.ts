@@ -107,6 +107,7 @@ describe("invoicesApi", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({
       paymentMethod: "CASH",
       clientInvoiceId: "offline-invoice-1779012000000",
+      clientOperationId: "offline-invoice-1779012000000",
       items: [{ productId: "product-1", quantity: 2 }],
     });
   });
@@ -138,5 +139,6 @@ describe("invoicesApi", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).not.toHaveProperty("clientInvoiceId");
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("clientOperationId");
   });
 });

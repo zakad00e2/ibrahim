@@ -5,6 +5,9 @@ import { listCustomers, type CustomersListResult } from "./customersApi";
 import { listProducts, type ProductsListResult } from "./productsApi";
 
 export const REPORTS_PAGE_SIZE = 100;
+export const REPORTS_CONCURRENCY_LIMIT = 4;
+const REPORTS_MAX_PAGES = 500;
+const REPORTS_MAX_ITEMS = REPORTS_PAGE_SIZE * REPORTS_MAX_PAGES;
 
 export type ReportsDataset = {
   products: Product[];
@@ -25,12 +28,12 @@ const collectPaginatedItems = async <T>(
   const items: T[] = [];
   let page = 1;
 
-  for (let fetchedPages = 0; fetchedPages < 500; fetchedPages += 1) {
+  for (let fetchedPages = 0; fetchedPages < REPORTS_MAX_PAGES; fetchedPages += 1) {
     const result = await loadPage(page);
     items.push(...result.items);
 
     const total = Number.isFinite(result.total) ? Math.max(0, result.total) : 0;
-    if (result.items.length === 0) break;
+    if (result.items.length === 0 || items.length >= REPORTS_MAX_ITEMS) break;
     if (total > 0) {
       if (items.length >= total) break;
     } else {
@@ -42,6 +45,33 @@ const collectPaginatedItems = async <T>(
   }
 
   return items;
+};
+
+const settleWithConcurrency = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> => {
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const runNext = async (): Promise<void> => {
+    const index = nextIndex;
+    nextIndex += 1;
+    if (index >= items.length) return;
+
+    try {
+      results[index] = { status: "fulfilled", value: await worker(items[index]) };
+    } catch (reason) {
+      results[index] = { status: "rejected", reason };
+    }
+
+    await runNext();
+  };
+
+  await Promise.all(Array.from({ length: Math.min(safeLimit, items.length) }, runNext));
+  return results;
 };
 
 const loadReportProducts = (): Promise<Product[]> =>
@@ -59,11 +89,13 @@ const loadReportCustomers = async (): Promise<Customer[]> => {
   );
   if (customersNeedingDebtSummary.length === 0) return customers;
 
-  const settled = await Promise.allSettled(
-    customersNeedingDebtSummary.map(async (customer) => ({
+  const settled = await settleWithConcurrency(
+    customersNeedingDebtSummary,
+    REPORTS_CONCURRENCY_LIMIT,
+    async (customer) => ({
       customerId: customer.id,
       summary: await getCustomerDebts(customer.id),
-    })),
+    }),
   );
   const summariesByCustomerId = new Map<string, DebtSummary>();
 
@@ -87,8 +119,10 @@ const hydrateInvoiceItems = async (invoices: Invoice[]): Promise<Invoice[]> => {
   const invoicesWithoutItems = invoices.filter((invoice) => invoice.id && invoice.items.length === 0);
   if (invoicesWithoutItems.length === 0) return invoices;
 
-  const settled = await Promise.allSettled(
-    invoicesWithoutItems.map((invoice) => getInvoiceById(invoice.id)),
+  const settled = await settleWithConcurrency(
+    invoicesWithoutItems,
+    REPORTS_CONCURRENCY_LIMIT,
+    (invoice) => getInvoiceById(invoice.id),
   );
   const detailsById = new Map<string, Invoice>();
 

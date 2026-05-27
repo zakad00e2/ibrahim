@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCustomerDebts, payDebt } from "./debtsApi";
+import { getCustomerDebts, payCustomerDebtAuto, payDebt } from "./debtsApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -61,6 +61,51 @@ describe("debtsApi", () => {
       paid: 60,
       remaining: 40,
       payments: [{ amount: 60 }],
+    });
+  });
+
+  it("includes clientOperationId when paying a single debt", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify({
+      debt: {
+        id: "d1",
+        invoiceId: "i1",
+        amount: "100.00",
+        paid: "25.00",
+        remaining: "75.00",
+      },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await payDebt("d1", 25, "cash drawer", { clientOperationId: "payment-op-1" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      amount: 25,
+      notes: "cash drawer",
+      clientOperationId: "payment-op-1",
+    });
+  });
+
+  it("includes clientOperationId when paying customer-level debt", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: { totalRemaining: "0" },
+        debts: [],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await payCustomerDebtAuto("c1", 40, undefined, { clientOperationId: "customer-payment-op-1" });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      amount: 40,
+      clientOperationId: "customer-payment-op-1",
     });
   });
 });

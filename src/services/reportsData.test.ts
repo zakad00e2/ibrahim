@@ -4,7 +4,7 @@ import { getCustomerDebts } from "./debtsApi";
 import { getInvoiceById, listInvoices } from "./invoicesApi";
 import { listProducts } from "./productsApi";
 import { listCustomers } from "./customersApi";
-import { loadReportsDataset, REPORTS_PAGE_SIZE } from "./reportsData";
+import { loadReportsDataset, REPORTS_CONCURRENCY_LIMIT, REPORTS_PAGE_SIZE } from "./reportsData";
 
 vi.mock("./productsApi", () => ({
   listProducts: vi.fn(),
@@ -153,5 +153,52 @@ describe("loadReportsDataset", () => {
       },
     ]);
     expect(dataset.invoices).toEqual([invoicesPageOne[0], hydratedInvoice]);
+  });
+
+  it("bounds concurrent report detail hydration requests", async () => {
+    const customersPage = Array.from({ length: 12 }, (_, index) => customer(`c${index}`));
+    const invoicesPage = Array.from({ length: 12 }, (_, index) => invoice(`i${index}`));
+    let activeDebtRequests = 0;
+    let maxDebtRequests = 0;
+    let activeInvoiceRequests = 0;
+    let maxInvoiceRequests = 0;
+
+    vi.mocked(listProducts).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: REPORTS_PAGE_SIZE,
+    });
+    vi.mocked(listCustomers).mockResolvedValue({
+      items: customersPage,
+      total: customersPage.length,
+      page: 1,
+      limit: REPORTS_PAGE_SIZE,
+    });
+    vi.mocked(listInvoices).mockResolvedValue({
+      items: invoicesPage,
+      total: invoicesPage.length,
+      page: 1,
+      limit: REPORTS_PAGE_SIZE,
+    });
+    vi.mocked(getCustomerDebts).mockImplementation(async () => {
+      activeDebtRequests += 1;
+      maxDebtRequests = Math.max(maxDebtRequests, activeDebtRequests);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      activeDebtRequests -= 1;
+      return { totalDebt: 0, totalRemaining: 0, debts: [] };
+    });
+    vi.mocked(getInvoiceById).mockImplementation(async (id: string) => {
+      activeInvoiceRequests += 1;
+      maxInvoiceRequests = Math.max(maxInvoiceRequests, activeInvoiceRequests);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      activeInvoiceRequests -= 1;
+      return invoice(id, 1);
+    });
+
+    await loadReportsDataset();
+
+    expect(maxDebtRequests).toBeLessThanOrEqual(REPORTS_CONCURRENCY_LIMIT);
+    expect(maxInvoiceRequests).toBeLessThanOrEqual(REPORTS_CONCURRENCY_LIMIT);
   });
 });
