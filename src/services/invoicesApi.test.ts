@@ -76,7 +76,7 @@ describe("invoicesApi", () => {
     }));
   });
 
-  it("includes clientInvoiceId when provided for offline queue invoice creation", async () => {
+  it("omits clientOperationId when clientInvoiceId is provided for invoice creation", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       id: "server-invoice-1",
       number: 33,
@@ -107,9 +107,9 @@ describe("invoicesApi", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({
       paymentMethod: "CASH",
       clientInvoiceId: "offline-invoice-1779012000000",
-      clientOperationId: "offline-invoice-1779012000000",
       items: [{ productId: "product-1", quantity: 2 }],
     });
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("clientOperationId");
   });
 
   it("omits clientInvoiceId for regular online invoice creation", async () => {

@@ -743,7 +743,9 @@ export function CustomersPage() {
                   </table>
                 </div>
               </div>
-            ) : debtInvoiceLoading ? (
+            ) : null}
+
+            {debtInvoiceLoading ? (
               <div className="rounded-lg bg-zinc-50 px-4 py-8 text-center text-sm font-normal text-zinc-500">
                 جارٍ تحميل تفاصيل الفاتورة...
               </div>
@@ -786,7 +788,7 @@ export function CustomersPage() {
                   </tbody>
                 </table>
               </div>
-            ) : !debtDetailLoading ? (
+            ) : !debtDetailLoading && !(selectedDebt.payments && selectedDebt.payments.length > 0) ? (
               <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
                 لا توجد دفعات أو تفاصيل فاتورة متاحة لهذا الدين.
               </div>

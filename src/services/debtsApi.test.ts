@@ -64,7 +64,7 @@ describe("debtsApi", () => {
     });
   });
 
-  it("includes clientOperationId when paying a single debt", async () => {
+  it("omits clientOperationId from single debt payment requests", async () => {
     const fetchMock = mockFetch(new Response(JSON.stringify({
       debt: {
         id: "d1",
@@ -84,11 +84,10 @@ describe("debtsApi", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       amount: 25,
       notes: "cash drawer",
-      clientOperationId: "payment-op-1",
     });
   });
 
-  it("includes clientOperationId when paying customer-level debt", async () => {
+  it("omits clientOperationId from customer-level debt payment requests", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -105,7 +104,6 @@ describe("debtsApi", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       amount: 40,
-      clientOperationId: "customer-payment-op-1",
     });
   });
 });

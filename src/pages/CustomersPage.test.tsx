@@ -4,11 +4,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomersPage } from "./CustomersPage";
+import type { Debt, Invoice } from "../types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const storeMocks = vi.hoisted(() => {
-  const debt = {
+  const debt: Debt = {
     id: "debt-1",
     invoiceId: "invoice-1",
     description: "فاتورة اختبار",
@@ -27,7 +28,7 @@ const storeMocks = vi.hoisted(() => {
     debts: [debt],
   };
 
-  const invoice = {
+  const invoice: Invoice = {
     id: "invoice-1",
     number: "INV-2026-001",
     date: "2026-05-23T10:00:00.000Z",
@@ -42,6 +43,7 @@ const storeMocks = vi.hoisted(() => {
 
   return {
     customer,
+    debt,
     invoice,
     addCustomer: vi.fn(async () => ({ ok: true, message: "ok", id: "customer-2" })),
     deleteCustomer: vi.fn(async () => ({ ok: true, message: "ok" })),
@@ -105,6 +107,8 @@ describe("CustomersPage details modal", () => {
   beforeEach(() => {
     mounted = null;
     vi.clearAllMocks();
+    storeMocks.invoice.items = [];
+    storeMocks.loadDebtDetail.mockResolvedValue(storeMocks.debt);
   });
 
   afterEach(async () => {
@@ -155,5 +159,47 @@ describe("CustomersPage details modal", () => {
     expect(dialog.textContent).toContain("INV-2026-001");
     expect(dialog.textContent).not.toContain("الوصف");
     expect(dialog.textContent).not.toContain("فاتورة اختبار");
+  });
+
+  it("keeps invoice products visible when the debt has payments", async () => {
+    storeMocks.invoice.items = [
+      {
+        productId: "product-1",
+        productName: "Test Product",
+        barcode: "123",
+        price: 25,
+        wholesalePrice: 15,
+        quantity: 2,
+        total: 50,
+      },
+    ];
+    storeMocks.loadDebtDetail.mockResolvedValueOnce({
+      ...storeMocks.debt,
+      payments: [
+        {
+          id: "payment-1",
+          amount: 10,
+          date: "2026-05-24T10:00:00.000Z",
+          notes: "cash payment",
+        },
+      ],
+    });
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "\u062a\u0633\u062f\u064a\u062f \u0627\u0644\u062f\u064a\u0646").click();
+    });
+    await act(async () => {
+      findButtonByText(document.body, "\u0639\u0631\u0636 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644").click();
+    });
+
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    const dialog = dialogs[dialogs.length - 1];
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Debt details dialog was not rendered");
+    }
+
+    expect(dialog.textContent).toContain("cash payment");
+    expect(dialog.textContent).toContain("Test Product");
   });
 });
