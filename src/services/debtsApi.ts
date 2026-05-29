@@ -1,7 +1,7 @@
 import { getJson, postJson } from "./apiClient";
 import { mapDebt, mapDebtPayment } from "./customersApi";
 import type { Debt, DebtSummary } from "../types";
-import { sumMoney, toMoneyNumber } from "../utils/money";
+import { compareMoney, minMoney, subtractMoney, sumMoney, toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -78,12 +78,42 @@ export const payCustomerDebtAuto = async (
   customerId: string,
   amount: number,
   notes?: string,
-  _options: DebtPaymentOptions = {},
+  options: DebtPaymentOptions = {},
 ): Promise<DebtSummary> => {
-  const body: Record<string, unknown> = { amount };
-  if (notes?.trim()) body.notes = notes.trim();
-  await postJson(`/api/debts/customer/${encodeURIComponent(customerId)}/pay`, body);
-  return getCustomerDebts(customerId);
+  const summary = await getCustomerDebts(customerId);
+
+  if (!Number.isFinite(amount) || compareMoney(amount, 0) <= 0) {
+    throw new Error("أدخل مبلغ تسديد صحيح");
+  }
+
+  if (compareMoney(amount, summary.totalRemaining) === 1) {
+    throw new Error("مبلغ التسديد أكبر من إجمالي الدين");
+  }
+
+  if (!summary.debts.some((debt) => compareMoney(debt.remaining, 0) === 1)) {
+    throw new Error("تعذر تحميل تفاصيل ديون العميل.");
+  }
+
+  let remainingPayment = amount;
+  const updatedDebtsById = new Map<string, Debt>();
+
+  for (const debt of summary.debts) {
+    if (compareMoney(remainingPayment, 0) <= 0) break;
+    if (compareMoney(debt.remaining, 0) <= 0) continue;
+
+    const paidNow = minMoney(debt.remaining, remainingPayment);
+    const updatedDebt = await payDebt(debt.id, paidNow, notes, options);
+    updatedDebtsById.set(debt.id, updatedDebt);
+    remainingPayment = subtractMoney(remainingPayment, paidNow);
+  }
+
+  const debts = summary.debts.map((debt) => updatedDebtsById.get(debt.id) ?? debt);
+
+  return {
+    totalDebt: sumMoney(debts.map((debt) => debt.amount)),
+    totalRemaining: sumMoney(debts.map((debt) => debt.remaining)),
+    debts,
+  };
 };
 
 export const getDebtById = async (id: string): Promise<Debt> => {

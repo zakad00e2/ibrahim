@@ -210,7 +210,6 @@ export function CustomersPage() {
     setMessage({ type: result.ok ? "success" : "error", text: result.message });
     if (result.ok) {
       setPaymentAmount("");
-      setShowPaymentForm(false);
     }
   };
 

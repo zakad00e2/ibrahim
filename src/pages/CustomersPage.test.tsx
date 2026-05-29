@@ -143,6 +143,31 @@ describe("CustomersPage details modal", () => {
     expect(footer.textContent).toContain("إغلاق");
   });
 
+  it("keeps the customer payment amount box visible after recording a payment", async () => {
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "تسديد الدين").click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Customer details dialog was not rendered");
+    }
+
+    expect(dialog.textContent).toContain("مبلغ الدفع");
+
+    await act(async () => {
+      findButtonByText(dialog, "تسجيل التسديد").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.payCustomerDebt).toHaveBeenCalledWith("customer-1", 0);
+    expect(dialog.textContent).toContain("مبلغ الدفع");
+    expect(findButtonByText(dialog, "تسجيل التسديد")).toBeInstanceOf(HTMLButtonElement);
+  });
+
   it("shows invoice number instead of debt description in the customer debts table", async () => {
     mounted = await renderCustomersPage();
 
