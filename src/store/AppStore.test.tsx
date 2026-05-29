@@ -511,4 +511,56 @@ describe("AppStore product actions", () => {
       }),
     );
   });
+
+  it("preserves existing debt metadata when an individual payment response only includes balances", async () => {
+    const customerWithDebt: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debtBalance: 50,
+      debts: [{
+        id: "debt-1",
+        invoiceId: "invoice-1",
+        invoiceNumber: "INV-1",
+        description: "Invoice",
+        date: "2026-05-17T10:00:00.000Z",
+        amount: 50,
+        paid: 0,
+        remaining: 50,
+      }],
+    };
+    customerApiMocks.listCustomers.mockResolvedValue({ items: [customerWithDebt], total: 1, page: 1, limit: 20 });
+    debtApiMocks.payDebt.mockResolvedValue({
+      id: "debt-1",
+      invoiceId: "",
+      description: "",
+      date: "",
+      amount: 50,
+      paid: 25,
+      remaining: 25,
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([customerWithDebt]);
+    });
+
+    let result: Awaited<ReturnType<StoreSnapshot["payDebt"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().payDebt("debt-1", 25);
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(mounted.getStore().customers[0].debts[0]).toMatchObject({
+      id: "debt-1",
+      invoiceId: "invoice-1",
+      invoiceNumber: "INV-1",
+      description: "Invoice",
+      date: "2026-05-17T10:00:00.000Z",
+      paid: 25,
+      remaining: 25,
+    });
+  });
 });

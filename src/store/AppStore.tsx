@@ -224,6 +224,24 @@ const toDebtSummary = (debts: Debt[]): DebtSummary => ({
   debts,
 });
 
+const mergeDebtMetadata = (debt: Debt, fallback?: Debt): Debt => {
+  if (!fallback) return debt;
+
+  return {
+    ...fallback,
+    ...debt,
+    id: debt.id || fallback.id,
+    invoiceId: debt.invoiceId || fallback.invoiceId,
+    invoiceNumber: debt.invoiceNumber ?? fallback.invoiceNumber,
+    description: debt.description || fallback.description,
+    date: debt.date || fallback.date,
+    amount: debt.amount || fallback.amount,
+    notes: debt.notes ?? fallback.notes,
+    payments: debt.payments ?? fallback.payments,
+    isPaid: debt.isPaid || compareMoney(debt.remaining, 0) === 0 || fallback.isPaid,
+  };
+};
+
 const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
   id: `offline-debt-${invoice.id}`,
   invoiceId: invoice.id,
@@ -854,10 +872,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       try {
         const summary = await payCustomerDebtAuto(customerId, amount, notes, { clientOperationId });
-        await cacheCustomerDebts(storeCacheKey, customerId, summary.debts, summary.totalRemaining);
+        const debts = summary.debts.map((debt) =>
+          mergeDebtMetadata(debt, customer.debts.find((item) => item.id === debt.id)),
+        );
+        const totalRemaining = debts.length > 0 ? calculateCustomerDebt(debts) : summary.totalRemaining;
+        await cacheCustomerDebts(storeCacheKey, customerId, debts, totalRemaining);
         setCustomers((current) =>
           current.map((c) =>
-            c.id === customerId ? { ...c, debts: summary.debts, debtBalance: summary.totalRemaining } : c,
+            c.id === customerId ? { ...c, debts, debtBalance: totalRemaining } : c,
           ),
         );
         return { ok: true, message: "تم تسجيل التسديد بنجاح" };
@@ -927,7 +949,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const updatedDebt = await apiPayDebt(debtId, amount, notes, { clientOperationId });
+        const updatedDebt = mergeDebtMetadata(
+          await apiPayDebt(debtId, amount, notes, {
+            clientOperationId,
+            ...(targetDebt ? { fallbackDebt: targetDebt } : {}),
+          }),
+          targetDebt,
+        );
         await upsertCachedDebts(storeCacheKey, [{ ...updatedDebt, customerId: customerWithDebt?.id }]);
         if (customerWithDebt) {
           const nextCustomers = customers.map((c) => {

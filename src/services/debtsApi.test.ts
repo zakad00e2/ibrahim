@@ -95,6 +95,9 @@ describe("debtsApi", () => {
           {
             id: "d1",
             invoiceId: "i1",
+            invoiceNumber: "INV-1",
+            description: "First invoice",
+            date: "2026-05-20T10:00:00.000Z",
             amount: "30.00",
             paid: "0.00",
             remaining: "30.00",
@@ -102,6 +105,9 @@ describe("debtsApi", () => {
           {
             id: "d2",
             invoiceId: "i2",
+            invoiceNumber: "INV-2",
+            description: "Second invoice",
+            date: "2026-05-21T10:00:00.000Z",
             amount: "50.00",
             paid: "0.00",
             remaining: "40.00",
@@ -143,8 +149,24 @@ describe("debtsApi", () => {
       totalDebt: 80,
       totalRemaining: 30,
       debts: [
-        expect.objectContaining({ id: "d1", paid: 30, remaining: 0 }),
-        expect.objectContaining({ id: "d2", paid: 10, remaining: 30 }),
+        expect.objectContaining({
+          id: "d1",
+          invoiceId: "i1",
+          invoiceNumber: "INV-1",
+          description: "First invoice",
+          date: "2026-05-20T10:00:00.000Z",
+          paid: 30,
+          remaining: 0,
+        }),
+        expect.objectContaining({
+          id: "d2",
+          invoiceId: "i2",
+          invoiceNumber: "INV-2",
+          description: "Second invoice",
+          date: "2026-05-21T10:00:00.000Z",
+          paid: 10,
+          remaining: 30,
+        }),
       ],
     });
 

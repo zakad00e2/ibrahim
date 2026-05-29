@@ -72,6 +72,25 @@ export const getCustomerDebts = async (customerId: string): Promise<DebtSummary>
 
 export type DebtPaymentOptions = {
   clientOperationId?: string;
+  fallbackDebt?: Debt;
+};
+
+const mergeDebtFallback = (debt: Debt, fallback?: Debt): Debt => {
+  if (!fallback) return debt;
+
+  return {
+    ...fallback,
+    ...debt,
+    id: debt.id || fallback.id,
+    invoiceId: debt.invoiceId || fallback.invoiceId,
+    invoiceNumber: debt.invoiceNumber ?? fallback.invoiceNumber,
+    description: debt.description || fallback.description,
+    date: debt.date || fallback.date,
+    amount: debt.amount || fallback.amount,
+    notes: debt.notes ?? fallback.notes,
+    payments: debt.payments ?? fallback.payments,
+    isPaid: debt.isPaid || compareMoney(debt.remaining, 0) === 0 || fallback.isPaid,
+  };
 };
 
 export const payCustomerDebtAuto = async (
@@ -102,7 +121,7 @@ export const payCustomerDebtAuto = async (
     if (compareMoney(debt.remaining, 0) <= 0) continue;
 
     const paidNow = minMoney(debt.remaining, remainingPayment);
-    const updatedDebt = await payDebt(debt.id, paidNow, notes, options);
+    const updatedDebt = await payDebt(debt.id, paidNow, notes, { ...options, fallbackDebt: debt });
     updatedDebtsById.set(debt.id, updatedDebt);
     remainingPayment = subtractMoney(remainingPayment, paidNow);
   }
@@ -125,10 +144,10 @@ export const payDebt = async (
   debtId: string,
   amount: number,
   notes?: string,
-  _options: DebtPaymentOptions = {},
+  options: DebtPaymentOptions = {},
 ): Promise<Debt> => {
   const body: Record<string, unknown> = { amount };
   if (notes?.trim()) body.notes = notes.trim();
   const payload = await postJson(`/api/debts/${encodeURIComponent(debtId)}/pay`, body);
-  return mapDebtWithPayments(payload);
+  return mergeDebtFallback(mapDebtWithPayments(payload), options.fallbackDebt);
 };

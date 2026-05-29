@@ -50,8 +50,17 @@ export const formatCurrency = (value: number) =>
     maximumFractionDigits: 2,
   }).format(value))}`;
 
-export const formatDate = (value: string) =>
-  toArabicDigits(new Intl.DateTimeFormat("ar-EG-u-nu-arab", {
+const missingDateLabel = "غير متوفر";
+
+export const formatDate = (value: string | null | undefined) => {
+  const date = value ? new Date(value) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return missingDateLabel;
+  }
+
+  return toArabicDigits(new Intl.DateTimeFormat("ar-EG-u-nu-arab", {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value)));
+  }).format(date));
+};
