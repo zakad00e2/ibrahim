@@ -33,6 +33,7 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
   const controlsRef = useRef<IScannerControls | null>(null);
   const lastCodeRef = useRef<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const [status, setStatus] = useState<ScannerStatus>("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -40,6 +41,38 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
     if (!open) return;
 
     let cancelled = false;
+
+    const playBeep = () => {
+      try {
+        const AudioCtx =
+          window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) return;
+
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx();
+        }
+
+        const ctx = audioContextRef.current;
+        if (ctx.state === "suspended") {
+          void ctx.resume();
+        }
+
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        oscillator.type = "square";
+        oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + 0.15);
+      } catch {
+        // ignore audio errors
+      }
+    };
 
     const handleResult = (result: import("@zxing/library").Result | undefined, err: unknown) => {
       if (cancelled) return;
@@ -50,6 +83,7 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
         if (keepOpen) {
           if (code === lastCodeRef.current) return;
           lastCodeRef.current = code;
+          playBeep();
           onDetect(code);
 
           if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -57,6 +91,7 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
             lastCodeRef.current = "";
           }, 1200);
         } else {
+          playBeep();
           onDetect(code);
           onClose();
         }
@@ -131,6 +166,11 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
           // ignore cleanup errors
         }
         controlsRef.current = null;
+      }
+
+      if (audioContextRef.current) {
+        void audioContextRef.current.close().catch(() => undefined);
+        audioContextRef.current = null;
       }
 
       setStatus("idle");
