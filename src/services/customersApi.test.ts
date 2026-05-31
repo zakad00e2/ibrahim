@@ -20,7 +20,7 @@ describe("customersApi", () => {
       }),
     );
 
-    await expect(deleteCustomer("customer-1")).rejects.toThrow("Internal server error");
+    await expect(deleteCustomer("customer-1")).rejects.toThrow("حدث خطأ في الخادم. حاول مرة أخرى.");
   });
 
   it("sends the delete request to the selected customer endpoint", async () => {

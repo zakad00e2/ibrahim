@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { loginRequest, registerRequest, superAdminLoginRequest } from "../services/authApi";
+import { toUserFacingMessage } from "../services/apiClient";
 import { clearOfflineData } from "../services/offlineDb";
 import type { AuthSession, AuthUser, LoginRequest, RegisterRequest, SuperAdminLoginRequest } from "../types";
 
@@ -104,7 +105,7 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
       saveSession(nextSession);
       return nextSession;
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر تسجيل الدخول.";
+      const message = toUserFacingMessage(nextError, "تعذر تسجيل الدخول.");
       setError(message);
       throw nextError;
     } finally {
@@ -122,7 +123,7 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
       saveSession(nextSession);
       return nextSession;
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر تسجيل دخول المشرف العام.";
+      const message = toUserFacingMessage(nextError, "تعذر تسجيل دخول المشرف العام.");
       setError(message);
       throw nextError;
     } finally {
@@ -137,7 +138,7 @@ export function AuthStoreProvider({ children }: { children: ReactNode }) {
     try {
       await registerRequest(request);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر إنشاء الحساب.";
+      const message = toUserFacingMessage(nextError, "تعذر إنشاء الحساب.");
       setError(message);
       throw nextError;
     } finally {

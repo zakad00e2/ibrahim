@@ -101,14 +101,28 @@ const findButtonByText = (container: HTMLElement, text: string) => {
   return button;
 };
 
+const findButtonByLabel = (container: HTMLElement, label: string) => {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.getAttribute("aria-label") === label,
+  );
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Button with aria-label "${label}" was not rendered`);
+  }
+
+  return button;
+};
+
 describe("CustomersPage details modal", () => {
   let mounted: { container: HTMLDivElement; root: Root } | null;
+  let confirmSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     mounted = null;
     vi.clearAllMocks();
     storeMocks.invoice.items = [];
     storeMocks.loadDebtDetail.mockResolvedValue(storeMocks.debt);
+    confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
   });
 
   afterEach(async () => {
@@ -119,6 +133,7 @@ describe("CustomersPage details modal", () => {
       mounted.container.remove();
     }
 
+    confirmSpy.mockRestore();
     document.body.innerHTML = "";
   });
 
@@ -226,5 +241,27 @@ describe("CustomersPage details modal", () => {
 
     expect(dialog.textContent).toContain("cash payment");
     expect(dialog.textContent).toContain("Test Product");
+  });
+
+  it("opens an in-app popup before deleting a customer instead of using the browser confirm dialog", async () => {
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByLabel(mounted!.container, "\u062d\u0630\u0641 \u0627\u0644\u0639\u0645\u064a\u0644").click();
+    });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="\u062a\u0623\u0643\u064a\u062f \u062d\u0630\u0641 \u0627\u0644\u0639\u0645\u064a\u0644"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Delete customer confirmation dialog was not rendered");
+    }
+
+    await act(async () => {
+      findButtonByText(dialog, "\u062d\u0630\u0641").click();
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.deleteCustomer).toHaveBeenCalledWith("customer-1");
   });
 });

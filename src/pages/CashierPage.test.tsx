@@ -27,7 +27,32 @@ const storeHarness = vi.hoisted(() => {
     isActive: true,
   };
 
+  const products = [
+    product,
+    {
+      id: "product-2",
+      name: "Test Sugar",
+      barcode: "2222222222",
+      price: 15,
+      wholesalePrice: 10,
+      stock: 6,
+      minStock: 2,
+      isActive: true,
+    },
+    {
+      id: "product-3",
+      name: "Test Tea",
+      barcode: "3333333333",
+      price: 20,
+      wholesalePrice: 12,
+      stock: 9,
+      minStock: 2,
+      isActive: true,
+    },
+  ];
+
   let cashierDraft = emptyDraft();
+  const completeSale = vi.fn(async () => ({ ok: true, message: "ok", id: "invoice-1" }));
   const subscribers = new Set<() => void>();
 
   const emit = () => {
@@ -36,11 +61,13 @@ const storeHarness = vi.hoisted(() => {
 
   return {
     product,
+    products,
     getCashierDraft: () => cashierDraft,
     resetCashierDraft: () => {
       cashierDraft = emptyDraft();
       emit();
     },
+    completeSale,
     setCashierDraft: (nextDraft: typeof cashierDraft | ((current: typeof cashierDraft) => typeof cashierDraft)) => {
       cashierDraft = typeof nextDraft === "function" ? nextDraft(cashierDraft) : nextDraft;
       emit();
@@ -69,13 +96,13 @@ vi.mock("../store/AppStore", async () => {
       React.useEffect(() => storeHarness.subscribe(forceRender), []);
 
       return {
-        products: [storeHarness.product],
+        products: storeHarness.products,
         customers: [],
         cashierDraft: storeHarness.getCashierDraft(),
         setCashierDraft: storeHarness.setCashierDraft,
         resetCashierDraft: storeHarness.resetCashierDraft,
         addCustomer: vi.fn(async () => ({ ok: true, message: "ok", id: "customer-1" })),
-        completeSale: vi.fn(async () => ({ ok: true, message: "ok", id: "invoice-1" })),
+        completeSale: storeHarness.completeSale,
         findProductByBarcodeRemote: vi.fn(async () => null),
         setCustomersQuery: vi.fn(),
       };
@@ -167,5 +194,57 @@ describe("CashierPage invoice draft", () => {
 
     expect(secondVisit.container.textContent).not.toContain(emptyInvoiceText);
     expect(getCompleteSaleButton(secondVisit.container).disabled).toBe(false);
+  });
+
+  it("completes the sale when Enter is pressed with an empty barcode after adding items", async () => {
+    const view = await renderCashier();
+
+    await clickProduct(view.container);
+
+    const barcodeInput = view.container.querySelector("#barcode");
+
+    if (!(barcodeInput instanceof HTMLInputElement)) {
+      throw new Error("Barcode input was not rendered");
+    }
+
+    await act(async () => {
+      barcodeInput.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(storeHarness.completeSale).toHaveBeenCalledTimes(1);
+    expect(storeHarness.completeSale).toHaveBeenCalledWith({
+      items: [
+        expect.objectContaining({
+          productId: storeHarness.product.id,
+          quantity: 1,
+        }),
+      ],
+      paymentMethod: "cash",
+      customerId: undefined,
+      paidAmount: 0,
+    });
+  });
+
+  it("renders cashier products in a vertical scroll area", async () => {
+    const view = await renderCashier();
+
+    const productScroller = view.container.querySelector('[aria-label="قائمة منتجات قابلة للتمرير العمودي"]');
+
+    if (!(productScroller instanceof HTMLElement)) {
+      throw new Error("Vertical product scroller was not rendered");
+    }
+
+    expect(productScroller.className).toContain("overflow-y-auto");
+    expect(productScroller.className).toContain("max-h-");
+    expect(productScroller.className).not.toContain("grid-flow-col");
+
+    const productButtons = Array.from(productScroller.querySelectorAll("button"));
+    expect(productButtons).toHaveLength(storeHarness.products.length);
   });
 });

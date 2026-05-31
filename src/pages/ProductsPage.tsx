@@ -4,6 +4,7 @@ import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
+import { toUserFacingMessage } from "../services/apiClient";
 import { useAppStore } from "../store/AppStore";
 import type { Product } from "../types";
 import { getStockStatus } from "../utils/calculations";
@@ -49,6 +50,7 @@ export function ProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -170,20 +172,24 @@ export function ProductsPage() {
   };
 
   const handleDelete = async (product: Product) => {
-    const confirmed = window.confirm(`هل تريد حذف المنتج "${toArabicDigits(product.name)}" نهائيًا؟`);
+    setDeleteConfirmProduct(product);
+  };
 
-    if (!confirmed) {
-      return;
-    }
+  const confirmDeleteProduct = async () => {
+    const product = deleteConfirmProduct;
+    if (!product) return;
 
     setDeleting(product.id);
+    setMessage(null);
 
     try {
       await deleteProduct(product.id);
+      setDeleteConfirmProduct(null);
       setMessage({ type: "success", text: "تم حذف المنتج بنجاح" });
       void refreshLowStock();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "تعذر حذف المنتج.";
+      const msg = toUserFacingMessage(err, "تعذر حذف المنتج.");
+      setDeleteConfirmProduct(null);
       setMessage({ type: "error", text: msg });
     } finally {
       setDeleting(null);
@@ -457,6 +463,44 @@ export function ProductsPage() {
             </div>
           ) : null}
         </form>
+      </Modal>
+
+      <Modal
+        open={deleteConfirmProduct !== null}
+        title="تأكيد حذف المنتج"
+        onClose={() => {
+          if (!deleting) setDeleteConfirmProduct(null);
+        }}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              className="!font-normal"
+              variant="secondary"
+              onClick={() => setDeleteConfirmProduct(null)}
+              disabled={deleting !== null}
+            >
+              إلغاء
+            </Button>
+            <Button
+              className="!font-normal"
+              variant="danger"
+              icon={<Trash2 className="h-5 w-5" />}
+              onClick={() => void confirmDeleteProduct()}
+              disabled={deleting !== null}
+            >
+              {deleting ? "جار الحذف..." : "حذف"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm font-normal leading-7 text-zinc-700">
+          <p>
+            هل تريد حذف المنتج "{toArabicDigits(deleteConfirmProduct?.name ?? "")}" نهائيًا؟
+          </p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">
+            لا يمكن التراجع عن هذه العملية بعد التأكيد.
+          </p>
+        </div>
       </Modal>
     </div>
   );

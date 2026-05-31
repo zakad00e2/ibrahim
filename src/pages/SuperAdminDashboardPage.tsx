@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
 import { StatusBadge } from "../components/StatusBadge";
+import { toUserFacingMessage } from "../services/apiClient";
 import {
   approveAdminStore,
   listAdminStores,
@@ -237,7 +238,7 @@ export function SuperAdminDashboardPage() {
       setStores(nextStores);
       setSelectedStoreId((current) => getNextSelectedAdminStoreId(current, nextStores));
     } catch (err) {
-      setStoresError(err instanceof Error ? err.message : "تعذر تحميل المتاجر.");
+      setStoresError(toUserFacingMessage(err, "تعذر تحميل المتاجر."));
     } finally {
       setStoresLoading(false);
     }
@@ -265,7 +266,7 @@ export function SuperAdminDashboardPage() {
       })
       .catch((err: unknown) => {
         if (!shouldIgnore) {
-          setUsersError(err instanceof Error ? err.message : "تعذر تحميل المستخدمين.");
+          setUsersError(toUserFacingMessage(err, "تعذر تحميل المستخدمين."));
           setUsers([]);
         }
       })
@@ -299,7 +300,7 @@ export function SuperAdminDashboardPage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "تعذر الموافقة على المتجر.",
+        text: toUserFacingMessage(err, "تعذر الموافقة على المتجر."),
       });
     } finally {
       setApprovingStoreId(null);
@@ -319,7 +320,7 @@ export function SuperAdminDashboardPage() {
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : action.errorFallback,
+        text: toUserFacingMessage(err, action.errorFallback),
       });
     } finally {
       setStatusActionStoreId(null);

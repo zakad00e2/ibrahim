@@ -33,7 +33,102 @@ const translateApiMessage = (message: string): string => {
     return "اسم المستخدم أو كلمة المرور غير صحيحة.";
   }
 
+  if (normalized === "invalid email") {
+    return "البريد الإلكتروني غير صالح.";
+  }
+
+  if (normalized === "internal server error") {
+    return "حدث خطأ في الخادم. حاول مرة أخرى.";
+  }
+
+  if (normalized === "not found") {
+    return "العنصر غير موجود.";
+  }
+
+  if (normalized === "unauthorized") {
+    return "انتهت صلاحية الجلسة. سجّل الدخول مرة أخرى.";
+  }
+
+  if (normalized === "forbidden") {
+    return "لا تملك صلاحية تنفيذ هذا الإجراء.";
+  }
+
+  if (normalized === "invalid or expired reset token") {
+    return "رابط إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية.";
+  }
+
+  if (normalized === "if this email exists, a reset link has been sent") {
+    return "إذا كان البريد الإلكتروني مسجلاً فسيصلك رابط استعادة كلمة المرور.";
+  }
+
+  if (normalized === "store approved successfully") {
+    return "تمت الموافقة على المتجر بنجاح.";
+  }
+
+  if (normalized === "store suspended successfully") {
+    return "تم تعليق المتجر بنجاح.";
+  }
+
+  if (normalized === "store reactivated successfully") {
+    return "تمت إعادة تفعيل المتجر.";
+  }
+
+  if (normalized === "password reset successfully") {
+    return "تم تغيير كلمة المرور بنجاح.";
+  }
+
+  if (normalized === "email verified successfully") {
+    return "تم تأكيد البريد الإلكتروني بنجاح.";
+  }
+
+  if (normalized.includes("too many requests") || normalized.includes("throttlerexception")) {
+    return "تجاوزت عدد المحاولات. حاول بعد قليل.";
+  }
+
+  if (normalized.startsWith("invalid product")) {
+    return "تعذر قراءة بيانات المنتج من الخادم.";
+  }
+
+  if (normalized.startsWith("invalid customer")) {
+    return "تعذر قراءة بيانات العميل من الخادم.";
+  }
+
+  if (normalized.startsWith("invalid invoice")) {
+    return "تعذر قراءة بيانات الفاتورة من الخادم.";
+  }
+
+  if (normalized.startsWith("invalid debt")) {
+    return "تعذر قراءة بيانات الدين من الخادم.";
+  }
+
+  if (normalized.startsWith("invalid admin store")) {
+    return "تعذر قراءة بيانات المتجر من الخادم.";
+  }
+
+  if (normalized.startsWith("invalid admin user")) {
+    return "تعذر قراءة بيانات المستخدم من الخادم.";
+  }
+
+  if (normalized.endsWith("must be a finite number")) {
+    return "القيمة المدخلة يجب أن تكون رقماً صحيحاً.";
+  }
+
   return message;
+};
+
+export const toUserFacingMessage = (error: unknown, fallback = "حدث خطأ غير متوقع. حاول مرة أخرى."): string => {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "";
+
+  if (!message.trim()) {
+    return fallback;
+  }
+
+  return translateApiMessage(message);
 };
 
 export const normalizeMessage = (payload: unknown, fallback: string): string => {
@@ -44,15 +139,15 @@ export const normalizeMessage = (payload: unknown, fallback: string): string => 
   const p = payload as ApiErrorPayload;
 
   if (Array.isArray(p.message)) {
-    return p.message.map(translateApiMessage).join("، ");
+    return p.message.map((message) => toUserFacingMessage(message, fallback)).join("، ");
   }
 
   if (typeof p.message === "string" && p.message.trim()) {
-    return translateApiMessage(p.message);
+    return toUserFacingMessage(p.message, fallback);
   }
 
   if (typeof p.error === "string" && p.error.trim()) {
-    return translateApiMessage(p.error);
+    return toUserFacingMessage(p.error, fallback);
   }
 
   return fallback;

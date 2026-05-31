@@ -250,6 +250,29 @@ export function CashierPage() {
     setNotice({ type: "success", text: `تمت إضافة ${toArabicDigits(product.name)} إلى الفاتورة` });
   };
 
+  const handleCompleteSale = useCallback(async () => {
+    setSaleSubmitting(true);
+
+    try {
+      const result = await completeSale({
+        items,
+        paymentMethod,
+        customerId: selectedCustomerId || undefined,
+        paidAmount: Number(normalizeDigits(paidAmount || "0")),
+      });
+
+      setNotice({ type: result.ok ? "success" : "error", text: result.message });
+
+      if (result.ok) {
+        resetCashierDraft();
+        setPrintReceipt(null);
+        barcodeInputRef.current?.focus();
+      }
+    } finally {
+      setSaleSubmitting(false);
+    }
+  }, [completeSale, items, paidAmount, paymentMethod, resetCashierDraft, selectedCustomerId]);
+
   const handleBarcodeEnter = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key !== "Enter") {
@@ -257,7 +280,15 @@ export function CashierPage() {
       }
 
       event.preventDefault();
-      const normalized = normalizeDigits(barcode);
+      const normalized = normalizeDigits(barcode).trim();
+
+      if (!normalized) {
+        if (items.length > 0 && !saleSubmitting) {
+          void handleCompleteSale();
+        }
+        return;
+      }
+
       const localProduct = findProductByBarcode(products, normalized);
 
       if (localProduct) {
@@ -281,7 +312,7 @@ export function CashierPage() {
       void lookup();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [barcode, products, findProductByBarcodeRemote],
+    [barcode, products, findProductByBarcodeRemote, handleCompleteSale, items.length, saleSubmitting],
   );
 
   const updateItemQuantity = (productId: string, delta: number) => {
@@ -401,29 +432,6 @@ export function CashierPage() {
     closeCustomerModal();
   };
 
-  const handleCompleteSale = async () => {
-    setSaleSubmitting(true);
-
-    try {
-      const result = await completeSale({
-        items,
-        paymentMethod,
-        customerId: selectedCustomerId || undefined,
-        paidAmount: Number(normalizeDigits(paidAmount || "0")),
-      });
-
-      setNotice({ type: result.ok ? "success" : "error", text: result.message });
-
-      if (result.ok) {
-        resetCashierDraft();
-        setPrintReceipt(null);
-        barcodeInputRef.current?.focus();
-      }
-    } finally {
-      setSaleSubmitting(false);
-    }
-  };
-
   const handlePrintInvoice = () => {
     if (items.length === 0) {
       setNotice({ type: "error", text: "لا توجد منتجات في الفاتورة للطباعة" });
@@ -518,7 +526,10 @@ export function CashierPage() {
             </label>
           </div>
 
-          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
+          <div
+            aria-label="قائمة منتجات قابلة للتمرير العمودي"
+            className="grid max-h-[34rem] gap-3 overflow-y-auto overscroll-y-contain p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3"
+          >
             {filteredProducts.map((product) => {
               const status = getStockStatus(product.stock);
 

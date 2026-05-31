@@ -1,4 +1,4 @@
-import { getJson, patchJson } from "./apiClient";
+import { getJson, patchJson, toUserFacingMessage } from "./apiClient";
 import type { AdminStore, AdminStoreCounts, AdminUser, AdminUserStore } from "../types";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -108,7 +108,7 @@ export const approveAdminStore = async (storeId: string): Promise<{ message: str
   const payload = await patchJson(`/api/admin/stores/${encodeURIComponent(storeId)}/approve`, {});
 
   if (isRecord(payload) && typeof payload.message === "string") {
-    return { message: payload.message };
+    return { message: toUserFacingMessage(payload.message, "تمت الموافقة على المتجر بنجاح.") };
   }
 
   return { message: "تمت الموافقة على المتجر بنجاح." };
@@ -118,7 +118,7 @@ export const suspendAdminStore = async (storeId: string): Promise<{ message: str
   const payload = await patchJson(`/api/admin/stores/${encodeURIComponent(storeId)}/suspend`, {});
 
   if (isRecord(payload) && typeof payload.message === "string") {
-    return { message: payload.message };
+    return { message: toUserFacingMessage(payload.message, "تم تعليق المتجر وسيتم طرد المستخدمين المسجلين.") };
   }
 
   return { message: "تم تعليق المتجر وسيتم طرد المستخدمين المسجلين." };
@@ -128,7 +128,7 @@ export const reactivateAdminStore = async (storeId: string): Promise<{ message: 
   const payload = await patchJson(`/api/admin/stores/${encodeURIComponent(storeId)}/reactivate`, {});
 
   if (isRecord(payload) && typeof payload.message === "string") {
-    return { message: payload.message };
+    return { message: toUserFacingMessage(payload.message, "تمت إعادة تفعيل المتجر.") };
   }
 
   return { message: "تمت إعادة تفعيل المتجر." };

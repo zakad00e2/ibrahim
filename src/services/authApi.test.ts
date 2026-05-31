@@ -122,7 +122,7 @@ describe("authApi", () => {
       }),
     );
 
-    await expect(forgotPasswordRequest("bad-email")).rejects.toThrow("Invalid email");
+    await expect(forgotPasswordRequest("bad-email")).rejects.toThrow("البريد الإلكتروني غير صالح.");
   });
 
   it("resets a password with the email token", async () => {
@@ -165,7 +165,7 @@ describe("authApi", () => {
         token: "expired-token",
         newPassword: "newStrongPassword123",
       }),
-    ).rejects.toThrow("Invalid or expired reset token");
+    ).rejects.toThrow("رابط إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية.");
   });
 
   it("shows a retry delay when public auth endpoints are throttled", async () => {

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, KeyRound, MailCheck, ShieldCheck } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../components/Button";
+import { toUserFacingMessage } from "../services/apiClient";
 import { verifyEmailRequest } from "../services/authApi";
 
 type VerifyLocationState = {
@@ -48,7 +49,7 @@ export function VerifyEmailPage() {
         },
       });
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر التحقق من الرمز. حاول مرة أخرى.";
+      const message = toUserFacingMessage(nextError, "تعذر التحقق من الرمز. حاول مرة أخرى.");
       setError(message);
     } finally {
       setIsLoading(false);

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation, useNavigate, type Location } from "react-router-dom";
 import { Button } from "../components/Button";
+import { toUserFacingMessage } from "../services/apiClient";
 import { forgotPasswordRequest } from "../services/authApi";
 import { useAuthStore } from "../store/AuthStore";
 
@@ -115,7 +116,7 @@ export function LoginPage() {
       await forgotPasswordRequest(email);
       setForgotPasswordMessage("إذا كان البريد موجودا، تم إرسال رابط الاستعادة.");
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر إرسال رابط الاستعادة. حاول مرة أخرى.";
+      const message = toUserFacingMessage(nextError, "تعذر إرسال رابط الاستعادة. حاول مرة أخرى.");
       setForgotPasswordError(message);
     } finally {
       setForgotPasswordLoading(false);

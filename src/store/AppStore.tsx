@@ -36,6 +36,7 @@ import {
   type CustomersListResult,
   type ListCustomersParams,
 } from "../services/customersApi";
+import { toUserFacingMessage } from "../services/apiClient";
 import {
   getCustomerDebts,
   getDebtById,
@@ -388,7 +389,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setProductsTotal(cached.total);
         setProductsError(null);
       } else {
-        const msg = err instanceof Error ? err.message : "تعذر تحميل المنتجات.";
+        const msg = toUserFacingMessage(err, "تعذر تحميل المنتجات.");
         setProductsError(msg);
       }
     } finally {
@@ -513,7 +514,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setCustomersTotal(cached.total);
         setCustomersError(null);
       } else {
-        const msg = err instanceof Error ? err.message : "تعذر تحميل العملاء.";
+        const msg = toUserFacingMessage(err, "تعذر تحميل العملاء.");
         setCustomersError(msg);
       }
     } finally {
@@ -567,7 +568,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setInvoicesTotal(cached.total);
         setInvoicesError(null);
       } else {
-        const msg = err instanceof Error ? err.message : "تعذر تحميل الفواتير.";
+        const msg = toUserFacingMessage(err, "تعذر تحميل الفواتير.");
         setInvoicesError(msg);
       }
     } finally {
@@ -648,7 +649,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         void fetchLowStock();
         return { ok: true, message: "تمت إضافة المنتج بنجاح", id: saved.id };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة المنتج." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر إضافة المنتج.") };
       }
     },
     [addCreatedProductToCurrentQuery, fetchLowStock, storeCacheKey],
@@ -666,7 +667,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         void fetchLowStock();
         return { ok: true, message: "تم تعديل المنتج بنجاح" };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تعديل المنتج." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تعديل المنتج.") };
       }
     },
     [fetchProducts, fetchLowStock, mergeProductIntoCurrentPage, storeCacheKey],
@@ -797,7 +798,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setIsOffline(true);
           return persistOfflineCustomer();
         }
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر إضافة العميل." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر إضافة العميل.") };
       }
     },
     [fetchCustomers, mergeCustomerIntoCurrentPage, queueOwnerKey, storeCacheKey],
@@ -824,7 +825,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         );
         return { ok: true, message: "تم تعديل العميل بنجاح" };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تعديل العميل." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تعديل العميل.") };
       }
     },
     [storeCacheKey],
@@ -837,7 +838,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         await fetchCustomers(customersQueryRef.current);
         return { ok: true, message: "تم حذف العميل بنجاح" };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر حذف العميل." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر حذف العميل.") };
       }
     },
     [fetchCustomers],
@@ -907,7 +908,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             );
           })
           .catch(() => undefined);
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل التسديد." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تسجيل التسديد.") };
       }
     },
     [customers, queueOwnerKey, storeCacheKey],
@@ -980,7 +981,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           await upsertCachedCustomers(storeCacheKey, optimisticCustomers);
           return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: debtId };
         }
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل الدفعة." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تسجيل الدفعة.") };
       }
     },
     [customers, queueOwnerKey, storeCacheKey],
@@ -1116,7 +1117,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setIsOffline(true);
           return persistOfflineSale();
         }
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تسجيل البيع على الخادم." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تسجيل البيع على الخادم.") };
       }
 
       // Enrich items with wholesalePrice from local products (server may not return it)
@@ -1259,7 +1260,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
         return { ok: true, message: "تم تعديل الفاتورة بنجاح" };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر تعديل الفاتورة." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر تعديل الفاتورة.") };
       }
     },
     [customers, invoices, products, refreshCustomers, refreshProducts],
@@ -1277,7 +1278,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (invoice.customerId) void refreshCustomers();
         return { ok: true, message: "تم حذف الفاتورة بنجاح" };
       } catch (err) {
-        return { ok: false, message: err instanceof Error ? err.message : "تعذر حذف الفاتورة." };
+        return { ok: false, message: toUserFacingMessage(err, "تعذر حذف الفاتورة.") };
       }
     },
     [invoices, refreshProducts, refreshCustomers],

@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { AlertCircle, CheckCircle2, KeyRound, LockKeyhole } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "../components/Button";
+import { toUserFacingMessage } from "../services/apiClient";
 import { resetPasswordRequest } from "../services/authApi";
 
 export function ResetPasswordPage() {
@@ -50,7 +51,7 @@ export function ResetPasswordPage() {
       setPassword("");
       setConfirmPassword("");
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "تعذر تغيير كلمة المرور. حاول مرة أخرى.";
+      const message = toUserFacingMessage(nextError, "تعذر تغيير كلمة المرور. حاول مرة أخرى.");
       setError(message);
     } finally {
       setIsLoading(false);

@@ -4,6 +4,7 @@ import { AnimatedDigits } from "../components/AnimatedDigits";
 import { StatusBadge } from "../components/StatusBadge";
 import { getCustomerDebtTotal, getStockStatus, getTopSellingProducts } from "../utils/calculations";
 import { formatCurrency, formatNumber, toArabicDigits } from "../utils/formatCurrency";
+import { toUserFacingMessage } from "../services/apiClient";
 import { getDailyProfit, type DailyProfit } from "../services/reportsApi";
 import { loadReportsDataset, type ReportsDataset } from "../services/reportsData";
 
@@ -58,7 +59,7 @@ export function ReportsPage() {
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) {
-          setDailyProfitError(err instanceof Error ? err.message : "تعذر تحميل بيانات التقرير.");
+          setDailyProfitError(toUserFacingMessage(err, "تعذر تحميل بيانات التقرير."));
         }
       })
       .finally(() => {
@@ -83,7 +84,7 @@ export function ReportsPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setReportsError(err instanceof Error ? err.message : "تعذر تحميل بيانات التقرير.");
+          setReportsError(toUserFacingMessage(err, "تعذر تحميل بيانات التقرير."));
         }
       })
       .finally(() => {

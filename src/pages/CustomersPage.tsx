@@ -58,6 +58,8 @@ export function CustomersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [debtMessage, setDebtMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deleteConfirmCustomer, setDeleteConfirmCustomer] = useState<Customer | null>(null);
+  const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null);
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -195,10 +197,17 @@ export function CustomersPage() {
   };
 
   const handleDelete = async (customer: Customer) => {
-    const confirmed = window.confirm(`هل تريد حذف العميل "${toArabicDigits(customer.name)}"؟`);
-    if (!confirmed) return;
+    setDeleteConfirmCustomer(customer);
+  };
 
+  const confirmDeleteCustomer = async () => {
+    const customer = deleteConfirmCustomer;
+    if (!customer) return;
+
+    setDeletingCustomerId(customer.id);
     const result = await deleteCustomer(customer.id);
+    setDeletingCustomerId(null);
+    setDeleteConfirmCustomer(null);
     setMessage({ type: result.ok ? "success" : "error", text: result.message });
   };
 
@@ -794,6 +803,42 @@ export function CustomersPage() {
             ) : null}
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={deleteConfirmCustomer !== null}
+        title="تأكيد حذف العميل"
+        onClose={() => {
+          if (!deletingCustomerId) setDeleteConfirmCustomer(null);
+        }}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteConfirmCustomer(null)}
+              disabled={deletingCustomerId !== null}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Trash2 className="h-5 w-5" />}
+              onClick={() => void confirmDeleteCustomer()}
+              disabled={deletingCustomerId !== null}
+            >
+              {deletingCustomerId ? "جار الحذف..." : "حذف"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm font-normal leading-7 text-zinc-700">
+          <p>
+            هل تريد حذف العميل "{toArabicDigits(deleteConfirmCustomer?.name ?? "")}"؟
+          </p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">
+            سيتم حذف بيانات العميل حسب صلاحيات الخادم ولا يمكن التراجع من هذه النافذة بعد التأكيد.
+          </p>
+        </div>
       </Modal>
     </div>
   );

@@ -39,6 +39,7 @@ export function InvoicesPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [pageMessage, setPageMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmInvoice, setDeleteConfirmInvoice] = useState<Invoice | null>(null);
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -195,13 +196,21 @@ export function InvoicesPage() {
   };
 
   const handleDeleteInvoice = useCallback(
-    async (invoice: Invoice) => {
-      const confirmed = window.confirm(`هل تريد حذف الفاتورة ${invoice.number}؟`);
-      if (!confirmed) return;
+    (invoice: Invoice) => {
+      setDeleteConfirmInvoice(invoice);
+    },
+    [],
+  );
+
+  const confirmDeleteInvoice = useCallback(
+    async () => {
+      const invoice = deleteConfirmInvoice;
+      if (!invoice) return;
 
       setDeletingId(invoice.id);
       const result = await deleteInvoice(invoice.id);
       setDeletingId(null);
+      setDeleteConfirmInvoice(null);
 
       setPageMessage({ type: result.ok ? "success" : "error", text: result.message });
 
@@ -210,7 +219,7 @@ export function InvoicesPage() {
         if (editingInvoice?.id === invoice.id) closeEditModal();
       }
     },
-    [deleteInvoice, selectedInvoice, editingInvoice],
+    [deleteConfirmInvoice, deleteInvoice, selectedInvoice, editingInvoice],
   );
 
   const handleSearchChange = (value: string) => {
@@ -675,6 +684,42 @@ export function InvoicesPage() {
             </div>
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        open={deleteConfirmInvoice !== null}
+        title="تأكيد حذف الفاتورة"
+        onClose={() => {
+          if (!deletingId) setDeleteConfirmInvoice(null);
+        }}
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteConfirmInvoice(null)}
+              disabled={deletingId !== null}
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="danger"
+              icon={<Trash2 className="h-5 w-5" />}
+              onClick={() => void confirmDeleteInvoice()}
+              disabled={deletingId !== null}
+            >
+              {deletingId ? "جار الحذف..." : "حذف"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm font-normal leading-7 text-zinc-700">
+          <p>
+            هل تريد حذف الفاتورة {deleteConfirmInvoice?.number}؟
+          </p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">
+            سيتم حذف الفاتورة من السجلات حسب صلاحيات الخادم بعد التأكيد.
+          </p>
+        </div>
       </Modal>
     </div>
   );
