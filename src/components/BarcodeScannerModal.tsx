@@ -3,8 +3,27 @@ import { createPortal } from "react-dom";
 import { Camera, X } from "lucide-react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
-import { NotFoundException } from "@zxing/library";
+import { BarcodeFormat, DecodeHintType, NotFoundException } from "@zxing/library";
 import { Button } from "./Button";
+
+const scanHints = new Map<DecodeHintType, unknown>([
+  [
+    DecodeHintType.POSSIBLE_FORMATS,
+    [
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.CODE_93,
+      BarcodeFormat.ITF,
+      BarcodeFormat.CODABAR,
+      BarcodeFormat.QR_CODE,
+    ],
+  ],
+  [DecodeHintType.TRY_HARDER, true],
+]);
 
 type BarcodeScannerModalProps = {
   open: boolean;
@@ -61,10 +80,14 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
       try {
         if (!videoRef.current || cancelled) return;
 
-        const reader = new BrowserMultiFormatReader();
+        const reader = new BrowserMultiFormatReader(scanHints, { delayBetweenScanAttempts: 100 });
         const constraints: MediaStreamConstraints = {
           audio: false,
-          video: { facingMode: { ideal: "environment" } },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         };
 
         const controls = await reader.decodeFromConstraints(constraints, videoRef.current, handleResult);
