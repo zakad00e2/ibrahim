@@ -12,6 +12,8 @@
   "dependencies": {
     "@paper-design/shaders-react": "^0.0.76",
     "@vitejs/plugin-react": "^5.0.4",
+    "@zxing/browser": "^0.2.0",
+    "@zxing/library": "^0.21.3",
     "decimal.js": "^10.6.0",
     "dexie": "^4.4.2",
     "lucide-react": "^0.468.0",

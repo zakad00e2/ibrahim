@@ -9,7 +9,8 @@ import {
   type SetStateAction,
 } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
+import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -77,6 +78,7 @@ export function CashierPage() {
   const [customerFormSubmitting, setCustomerFormSubmitting] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [saleSubmitting, setSaleSubmitting] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<ReceiptSnapshot | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
   const [storeName, setStoreName] = useState(DEFAULT_STORE_NAME);
@@ -273,6 +275,33 @@ export function CashierPage() {
     }
   }, [completeSale, items, paidAmount, paymentMethod, resetCashierDraft, selectedCustomerId]);
 
+  const addByBarcode = useCallback(
+    (code: string) => {
+      const normalized = normalizeDigits(code).trim();
+
+      if (!normalized) return;
+
+      const localProduct = findProductByBarcode(products, normalized);
+
+      if (localProduct) {
+        addProductToInvoice(localProduct);
+        return;
+      }
+
+      void (async () => {
+        const remoteProduct = await findProductByBarcodeRemote(normalized);
+
+        if (!remoteProduct) {
+          setNotice({ type: "error", text: "لا يوجد منتج نشط بهذا الباركود" });
+        } else {
+          addProductToInvoice(remoteProduct);
+        }
+      })();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [products, findProductByBarcodeRemote],
+  );
+
   const handleBarcodeEnter = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key !== "Enter") {
@@ -289,30 +318,10 @@ export function CashierPage() {
         return;
       }
 
-      const localProduct = findProductByBarcode(products, normalized);
-
-      if (localProduct) {
-        addProductToInvoice(localProduct);
-        setBarcode("");
-        return;
-      }
-
-      const lookup = async () => {
-        const remoteProduct = await findProductByBarcodeRemote(normalized);
-
-        if (!remoteProduct) {
-          setNotice({ type: "error", text: "لا يوجد منتج نشط بهذا الباركود" });
-        } else {
-          addProductToInvoice(remoteProduct);
-        }
-
-        setBarcode("");
-      };
-
-      void lookup();
+      addByBarcode(normalized);
+      setBarcode("");
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [barcode, products, findProductByBarcodeRemote, handleCompleteSale, items.length, saleSubmitting],
+    [barcode, addByBarcode, handleCompleteSale, items.length, saleSubmitting],
   );
 
   const updateItemQuantity = (productId: string, delta: number) => {
@@ -476,20 +485,30 @@ export function CashierPage() {
           <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
             امسح الباركود هنا
           </label>
-          <div className="relative">
-            <input
-              ref={barcodeInputRef}
-              id="barcode"
-              value={barcode}
-              onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
-              onKeyDown={handleBarcodeEnter}
-              className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-zinc-500 focus:bg-white sm:h-14 sm:px-4 sm:text-xl"
-            />
-            {barcode ? null : (
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base font-normal leading-none text-zinc-400 sm:right-4 sm:text-xl">
-                اكتب أو امسح الباركود
-              </span>
-            )}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                ref={barcodeInputRef}
+                id="barcode"
+                value={barcode}
+                onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
+                onKeyDown={handleBarcodeEnter}
+                className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-zinc-500 focus:bg-white sm:h-14 sm:px-4 sm:text-xl"
+              />
+              {barcode ? null : (
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base font-normal leading-none text-zinc-400 sm:right-4 sm:text-xl">
+                  اكتب أو امسح الباركود
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              aria-label="مسح بالكاميرا"
+              className="sm:hidden flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-zinc-50 text-zinc-600 transition hover:bg-zinc-100 active:bg-zinc-200"
+            >
+              <Camera className="h-5 w-5" />
+            </button>
           </div>
 
           {notice ? (
@@ -922,6 +941,17 @@ export function CashierPage() {
       </Modal>
     </div>
     <PrintableInvoiceReceipt receipt={printReceipt} />
+    <BarcodeScannerModal
+      open={scannerOpen}
+      keepOpen
+      onDetect={(code) => {
+        addByBarcode(code);
+      }}
+      onClose={() => {
+        setScannerOpen(false);
+        barcodeInputRef.current?.focus();
+      }}
+    />
     </>
   );
 }

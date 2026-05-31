@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
+import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
@@ -52,6 +53,7 @@ export function ProductsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -400,14 +402,24 @@ export function ProductsPage() {
             />
           </label>
 
-          <label className="block">
+          <div className="block">
             <span className="mb-2 block text-sm font-normal text-zinc-900">الباركود</span>
-            <input
-              value={form.barcode}
-              onChange={(e) => setForm((c) => ({ ...c, barcode: normalizeDigits(e.target.value) }))}
-              className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
-            />
-          </label>
+            <div className="flex gap-2">
+              <input
+                value={form.barcode}
+                onChange={(e) => setForm((c) => ({ ...c, barcode: normalizeDigits(e.target.value) }))}
+                className="h-11 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+              <button
+                type="button"
+                onClick={() => setBarcodeScannerOpen(true)}
+                aria-label="مسح الباركود بالكاميرا"
+                className="sm:hidden flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-600 transition hover:bg-zinc-100 active:bg-zinc-200"
+              >
+                <Camera className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
@@ -502,6 +514,15 @@ export function ProductsPage() {
           </p>
         </div>
       </Modal>
+
+      <BarcodeScannerModal
+        open={barcodeScannerOpen}
+        onDetect={(code) => {
+          setForm((c) => ({ ...c, barcode: normalizeDigits(code) }));
+          setBarcodeScannerOpen(false);
+        }}
+        onClose={() => setBarcodeScannerOpen(false)}
+      />
     </div>
   );
 }
