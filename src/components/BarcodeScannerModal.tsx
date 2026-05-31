@@ -15,14 +15,8 @@ const scanHints = new Map<DecodeHintType, unknown>([
       BarcodeFormat.UPC_A,
       BarcodeFormat.UPC_E,
       BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.CODE_93,
-      BarcodeFormat.ITF,
-      BarcodeFormat.CODABAR,
-      BarcodeFormat.QR_CODE,
     ],
   ],
-  [DecodeHintType.TRY_HARDER, true],
 ]);
 
 type BarcodeScannerModalProps = {
@@ -80,7 +74,7 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
       try {
         if (!videoRef.current || cancelled) return;
 
-        const reader = new BrowserMultiFormatReader(scanHints, { delayBetweenScanAttempts: 100 });
+        const reader = new BrowserMultiFormatReader(scanHints, { delayBetweenScanAttempts: 50 });
         const constraints: MediaStreamConstraints = {
           audio: false,
           video: {
