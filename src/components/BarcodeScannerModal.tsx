@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, X } from "lucide-react";
-import { BrowserCodeReader, BrowserMultiFormatReader } from "@zxing/browser";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
 import { NotFoundException } from "@zxing/library";
 import { Button } from "./Button";
@@ -28,53 +28,46 @@ export function BarcodeScannerModal({ open, onClose, onDetect, keepOpen = false 
 
     let cancelled = false;
 
+    const handleResult = (result: import("@zxing/library").Result | undefined, err: unknown) => {
+      if (cancelled) return;
+
+      if (result) {
+        const code = result.getText();
+
+        if (keepOpen) {
+          if (code === lastCodeRef.current) return;
+          lastCodeRef.current = code;
+          onDetect(code);
+
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            lastCodeRef.current = "";
+          }, 1200);
+        } else {
+          onDetect(code);
+          onClose();
+        }
+      }
+
+      if (err && !(err instanceof NotFoundException)) {
+        console.error("ZXing scan error:", err);
+      }
+    };
+
     const start = async () => {
       setStatus("starting");
       setErrorMessage("");
 
       try {
-        const videoInputDevices = await BrowserCodeReader.listVideoInputDevices();
-
-        if (videoInputDevices.length === 0) {
-          if (!cancelled) {
-            setErrorMessage("لا توجد كاميرا متاحة على هذا الجهاز");
-            setStatus("error");
-          }
-          return;
-        }
-
-        const backCamera =
-          videoInputDevices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) ??
-          videoInputDevices[0];
-
         if (!videoRef.current || cancelled) return;
 
         const reader = new BrowserMultiFormatReader();
-        const controls = await reader.decodeFromVideoDevice(backCamera.deviceId, videoRef.current, (result, err) => {
-          if (cancelled) return;
+        const constraints: MediaStreamConstraints = {
+          audio: false,
+          video: { facingMode: { ideal: "environment" } },
+        };
 
-          if (result) {
-            const code = result.getText();
-
-            if (keepOpen) {
-              if (code === lastCodeRef.current) return;
-              lastCodeRef.current = code;
-              onDetect(code);
-
-              if (debounceRef.current) clearTimeout(debounceRef.current);
-              debounceRef.current = setTimeout(() => {
-                lastCodeRef.current = "";
-              }, 1200);
-            } else {
-              onDetect(code);
-              onClose();
-            }
-          }
-
-          if (err && !(err instanceof NotFoundException)) {
-            console.error("ZXing scan error:", err);
-          }
-        });
+        const controls = await reader.decodeFromConstraints(constraints, videoRef.current, handleResult);
 
         if (cancelled) {
           controls.stop();
