@@ -247,4 +247,29 @@ describe("CashierPage invoice draft", () => {
     const productButtons = Array.from(productScroller.querySelectorAll("button"));
     expect(productButtons).toHaveLength(storeHarness.products.length);
   });
+
+  it("keeps current invoice items in a scroll area so the summary can stay visible", async () => {
+    const view = await renderCashier();
+
+    const invoiceScroller = view.container.querySelector('[aria-label="قائمة الفاتورة الحالية قابلة للتمرير"]');
+
+    if (!(invoiceScroller instanceof HTMLElement)) {
+      throw new Error("Current invoice scroller was not rendered");
+    }
+
+    expect(invoiceScroller.className).toContain("overflow-y-auto");
+    expect(invoiceScroller.className).toContain("max-h-");
+
+    const summaryHeading = Array.from(view.container.querySelectorAll("h3")).find((heading) =>
+      heading.textContent?.includes("ملخص الفاتورة"),
+    );
+    const summary = summaryHeading?.closest("aside");
+
+    if (!(summary instanceof HTMLElement)) {
+      throw new Error("Invoice summary was not rendered");
+    }
+
+    expect(summary.className).toContain("lg:sticky");
+    expect(summary.className).toContain("lg:top-5");
+  });
 });

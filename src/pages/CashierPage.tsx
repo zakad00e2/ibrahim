@@ -479,7 +479,7 @@ export function CashierPage() {
 
   return (
     <>
-    <div className="print-hidden grid min-w-0 gap-4 lg:gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="print-hidden grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="flex min-w-0 flex-col gap-4 lg:gap-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
@@ -547,7 +547,7 @@ export function CashierPage() {
 
           <div
             aria-label="قائمة منتجات قابلة للتمرير العمودي"
-            className="grid max-h-[34rem] gap-3 overflow-y-auto overscroll-y-contain p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3"
+            className="grid max-h-[34rem] gap-3 overflow-y-auto overscroll-y-contain p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-2 2xl:grid-cols-3"
           >
             {filteredProducts.map((product) => {
               const status = getStockStatus(product.stock);
@@ -584,156 +584,161 @@ export function CashierPage() {
             <ReceiptText className="h-5 w-5 text-brand-600" />
             <h3 className="text-lg font-medium text-zinc-950">الفاتورة الحالية</h3>
           </div>
-          <div className="grid gap-3 p-3 md:hidden">
-            {items.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm font-normal text-zinc-500">
-                لم تتم إضافة منتجات بعد
-              </div>
-            ) : (
-              items.map((item) => (
-                <article key={item.productId} className="rounded-lg border border-zinc-200 bg-white p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className="break-words text-sm font-medium text-zinc-950">{toArabicDigits(item.productName)}</h4>
-                      <p className="mt-1 break-all text-xs font-normal text-zinc-500">{item.barcode}</p>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0"
-                      aria-label="حذف المنتج من الفاتورة"
-                      onClick={() => removeItem(item.productId)}
-                    >
-                      <Trash2 className="h-5 w-5 text-red-600" />
-                    </Button>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-lg bg-zinc-50 p-2">
-                      <p className="text-xs font-normal text-zinc-500">السعر</p>
-                      <p className="mt-1 font-normal text-zinc-950"><AnimatedDigits value={formatCurrency(item.price)} /></p>
-                    </div>
-                    <div className="rounded-lg bg-brand-50 p-2">
-                      <p className="text-xs font-normal text-brand-700">الإجمالي</p>
-                      <p className="mt-1 font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-sm font-normal text-zinc-500">الكمية</span>
-                    <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
+          <div
+            aria-label="قائمة الفاتورة الحالية قابلة للتمرير"
+            className="max-h-[32rem] overflow-y-auto overscroll-y-contain lg:max-h-[calc(100dvh-16rem)]"
+          >
+            <div className="grid gap-3 p-3 md:hidden">
+              {items.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-8 text-center text-sm font-normal text-zinc-500">
+                  لم تتم إضافة منتجات بعد
+                </div>
+              ) : (
+                items.map((item) => (
+                  <article key={item.productId} className="rounded-lg border border-zinc-200 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="break-words text-sm font-medium text-zinc-950">{toArabicDigits(item.productName)}</h4>
+                        <p className="mt-1 break-all text-xs font-normal text-zinc-500">{item.barcode}</p>
+                      </div>
                       <Button
                         size="icon"
-                        variant="secondary"
-                        className="h-8 w-8 rounded-md"
-                        aria-label="تقليل الكمية"
-                        onClick={() => decreaseQuantity(item.productId)}
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0"
+                        aria-label="حذف المنتج من الفاتورة"
+                        onClick={() => removeItem(item.productId)}
                       >
-                        <Minus className="h-3.5 w-3.5" />
-                      </Button>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        min="1"
-                        value={toArabicDigits(item.quantity)}
-                        onChange={(event) => setItemQuantity(item.productId, event.target.value)}
-                        aria-label="كتابة الكمية"
-                        className="h-8 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
-                      />
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        className="h-8 w-8 rounded-md"
-                        aria-label="زيادة الكمية"
-                        onClick={() => increaseQuantity(item.productId)}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
+                        <Trash2 className="h-5 w-5 text-red-600" />
                       </Button>
                     </div>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
 
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[680px] text-right text-sm lg:min-w-0">
-              <thead className="bg-zinc-50 text-xs font-normal text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3 font-normal">اسم المنتج</th>
-                  <th className="px-4 py-3 font-normal">السعر</th>
-                  <th className="px-4 py-3 text-center font-normal">الكمية</th>
-                  <th className="px-4 py-3 font-normal">الإجمالي</th>
-                  <th className="px-4 py-3 font-normal">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center font-normal text-zinc-500">
-                      لم تتم إضافة منتجات بعد
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.productId}>
-                      <td className="px-4 py-2 font-normal text-zinc-950">
-                        <span className="line-clamp-2 break-words">{toArabicDigits(item.productName)}</span>
-                      </td>
-                      <td className="px-4 py-2 text-base font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
-                      <td className="px-4 py-2 text-center">
-                        <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
-                          <Button
-                            size="icon"
-                            variant="secondary"
-                            className="h-7 w-7 rounded-md"
-                            aria-label="تقليل الكمية"
-                            onClick={() => decreaseQuantity(item.productId)}
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </Button>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            min="1"
-                            value={toArabicDigits(item.quantity)}
-                            onChange={(event) => setItemQuantity(item.productId, event.target.value)}
-                            aria-label="كتابة الكمية"
-                            className="h-7 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
-                          />
-                          <Button
-                            size="icon"
-                            variant="secondary"
-                            className="h-7 w-7 rounded-md"
-                            aria-label="زيادة الكمية"
-                            onClick={() => increaseQuantity(item.productId)}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-base font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
-                      <td className="px-4 py-2">
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-lg bg-zinc-50 p-2">
+                        <p className="text-xs font-normal text-zinc-500">السعر</p>
+                        <p className="mt-1 font-normal text-zinc-950"><AnimatedDigits value={formatCurrency(item.price)} /></p>
+                      </div>
+                      <div className="rounded-lg bg-brand-50 p-2">
+                        <p className="text-xs font-normal text-brand-700">الإجمالي</p>
+                        <p className="mt-1 font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-sm font-normal text-zinc-500">الكمية</span>
+                      <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
                         <Button
                           size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          aria-label="حذف المنتج من الفاتورة"
-                          onClick={() => removeItem(item.productId)}
+                          variant="secondary"
+                          className="h-8 w-8 rounded-md"
+                          aria-label="تقليل الكمية"
+                          onClick={() => decreaseQuantity(item.productId)}
                         >
-                          <Trash2 className="h-5 w-5 text-red-600" />
+                          <Minus className="h-3.5 w-3.5" />
                         </Button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          min="1"
+                          value={toArabicDigits(item.quantity)}
+                          onChange={(event) => setItemQuantity(item.productId, event.target.value)}
+                          aria-label="كتابة الكمية"
+                          className="h-8 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                        />
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          className="h-8 w-8 rounded-md"
+                          aria-label="زيادة الكمية"
+                          onClick={() => increaseQuantity(item.productId)}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[680px] text-right text-sm lg:min-w-0">
+                <thead className="sticky top-0 z-10 bg-zinc-50 text-xs font-normal text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3 font-normal">اسم المنتج</th>
+                    <th className="px-4 py-3 font-normal">السعر</th>
+                    <th className="px-4 py-3 text-center font-normal">الكمية</th>
+                    <th className="px-4 py-3 font-normal">الإجمالي</th>
+                    <th className="px-4 py-3 font-normal">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-10 text-center font-normal text-zinc-500">
+                        لم تتم إضافة منتجات بعد
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    items.map((item) => (
+                      <tr key={item.productId}>
+                        <td className="px-4 py-2 font-normal text-zinc-950">
+                          <span className="line-clamp-2 break-words">{toArabicDigits(item.productName)}</span>
+                        </td>
+                        <td className="px-4 py-2 text-base font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 p-0.5">
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-7 w-7 rounded-md"
+                              aria-label="تقليل الكمية"
+                              onClick={() => decreaseQuantity(item.productId)}
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </Button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              min="1"
+                              value={toArabicDigits(item.quantity)}
+                              onChange={(event) => setItemQuantity(item.productId, event.target.value)}
+                              aria-label="كتابة الكمية"
+                              className="h-7 w-12 rounded-md border border-transparent bg-white px-1 text-center text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+                            />
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-7 w-7 rounded-md"
+                              aria-label="زيادة الكمية"
+                              onClick={() => increaseQuantity(item.productId)}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-base font-normal text-brand-700"><AnimatedDigits value={formatCurrency(item.total)} /></td>
+                        <td className="px-4 py-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            aria-label="حذف المنتج من الفاتورة"
+                            onClick={() => removeItem(item.productId)}
+                          >
+                            <Trash2 className="h-5 w-5 text-red-600" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
 
-      <aside className="h-fit min-w-0 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-5">
+      <aside className="h-fit min-w-0 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 lg:sticky lg:top-5">
         <h3 className="text-xl font-medium text-zinc-950">ملخص الفاتورة</h3>
 
         <dl className="mt-5 space-y-3">
