@@ -135,9 +135,9 @@ const unmount = async (target: { root: Root; container: HTMLDivElement }) => {
   roots = roots.filter((entry) => entry !== target);
 };
 
-const clickProduct = async (container: HTMLElement) => {
+const clickProduct = async (container: HTMLElement, productName = storeHarness.product.name) => {
   const productButton = Array.from(container.querySelectorAll("button")).find((button) =>
-    button.textContent?.includes(storeHarness.product.name),
+    button.textContent?.includes(productName),
   );
 
   if (!productButton) {
@@ -299,6 +299,7 @@ describe("CashierPage invoice draft", () => {
 
     expect(invoiceScroller.className).toContain("overflow-y-auto");
     expect(invoiceScroller.className).toContain("max-h-");
+    expect(invoiceScroller.className).not.toContain("overscroll-y-contain");
 
     const summaryHeading = Array.from(view.container.querySelectorAll("h3")).find((heading) =>
       heading.textContent?.includes("ملخص الفاتورة"),
@@ -311,5 +312,67 @@ describe("CashierPage invoice draft", () => {
 
     expect(summary.className).toContain("lg:sticky");
     expect(summary.className).toContain("lg:top-5");
+  });
+
+  it("scrolls the current invoice list with the mouse wheel when hovering invoice rows", async () => {
+    const view = await renderCashier();
+
+    for (const product of storeHarness.products) {
+      await clickProduct(view.container, product.name);
+    }
+
+    const invoiceScroller = view.container.querySelector('[aria-label="قائمة الفاتورة الحالية قابلة للتمرير"]');
+
+    if (!(invoiceScroller instanceof HTMLElement)) {
+      throw new Error("Current invoice scroller was not rendered");
+    }
+
+    Object.defineProperties(invoiceScroller, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 400 },
+    });
+
+    const table = invoiceScroller.querySelector("table");
+
+    if (!(table instanceof HTMLElement)) {
+      throw new Error("Invoice table was not rendered");
+    }
+
+    expect(table.parentElement?.className).not.toContain("overflow-x-auto");
+
+    await act(async () => {
+      table.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 80 }));
+    });
+
+    expect(invoiceScroller.scrollTop).toBe(80);
+  });
+
+  it("lets the page continue scrolling when the current invoice list is already at an edge", async () => {
+    const view = await renderCashier();
+
+    for (const product of storeHarness.products) {
+      await clickProduct(view.container, product.name);
+    }
+
+    const invoiceScroller = view.container.querySelector('[aria-label="قائمة الفاتورة الحالية قابلة للتمرير"]');
+
+    if (!(invoiceScroller instanceof HTMLElement)) {
+      throw new Error("Current invoice scroller was not rendered");
+    }
+
+    Object.defineProperties(invoiceScroller, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 400 },
+    });
+    invoiceScroller.scrollTop = 300;
+
+    const wheelEvent = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 80 });
+
+    await act(async () => {
+      invoiceScroller.dispatchEvent(wheelEvent);
+    });
+
+    expect(invoiceScroller.scrollTop).toBe(300);
+    expect(wheelEvent.defaultPrevented).toBe(false);
   });
 });

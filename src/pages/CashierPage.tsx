@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type SetStateAction,
+  type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, Camera, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
@@ -479,6 +480,22 @@ export function CashierPage() {
     setPrintRequestId(Date.now());
   };
 
+  const handleInvoiceWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (event.ctrlKey || event.deltaY === 0) return;
+
+    const scroller = event.currentTarget;
+    const maxScrollTop = scroller.scrollHeight - scroller.clientHeight;
+
+    if (maxScrollTop <= 0) return;
+
+    const nextScrollTop = Math.min(Math.max(scroller.scrollTop + event.deltaY, 0), maxScrollTop);
+
+    if (nextScrollTop === scroller.scrollTop) return;
+
+    event.preventDefault();
+    scroller.scrollTop = nextScrollTop;
+  };
+
   return (
     <>
     <div className="print-hidden grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -588,7 +605,8 @@ export function CashierPage() {
           </div>
           <div
             aria-label="قائمة الفاتورة الحالية قابلة للتمرير"
-            className="max-h-[32rem] overflow-y-auto overscroll-y-contain lg:max-h-[calc(100dvh-16rem)]"
+            className="max-h-[32rem] overflow-y-auto lg:max-h-[calc(100dvh-16rem)]"
+            onWheel={handleInvoiceWheel}
           >
             <div className="grid gap-3 p-3 md:hidden">
               {items.length === 0 ? (
@@ -662,7 +680,7 @@ export function CashierPage() {
               )}
             </div>
 
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden md:block">
               <table className="w-full min-w-[680px] text-right text-sm lg:min-w-0">
                 <thead className="sticky top-0 z-10 bg-zinc-50 text-xs font-normal text-zinc-500">
                   <tr>
