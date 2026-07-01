@@ -161,6 +161,20 @@ const getCompleteSaleButton = (container: HTMLElement) => {
   return button;
 };
 
+const getPrintButton = (container: HTMLElement) => {
+  const summary = container.querySelector("aside");
+  const completeSaleButton = getCompleteSaleButton(container);
+  const summaryButtons = summary ? Array.from(summary.querySelectorAll("button")) : [];
+  const completeSaleIndex = summaryButtons.indexOf(completeSaleButton);
+  const button = completeSaleIndex > 0 ? summaryButtons[completeSaleIndex - 1] : null;
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Print invoice button was not rendered");
+  }
+
+  return button;
+};
+
 describe("CashierPage invoice draft", () => {
   beforeEach(() => {
     storeHarness.resetCashierDraft();
@@ -229,6 +243,32 @@ describe("CashierPage invoice draft", () => {
       customerId: undefined,
       paidAmount: 0,
     });
+  });
+
+  it("renders the printable invoice with a print date and without a currency symbol", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-01T09:30:00Z"));
+
+    try {
+      const view = await renderCashier();
+
+      await clickProduct(view.container);
+
+      await act(async () => {
+        getPrintButton(view.container).click();
+      });
+
+      const receipt = document.body.querySelector(".print-receipt");
+
+      if (!(receipt instanceof HTMLElement)) {
+        throw new Error("Printable receipt was not rendered");
+      }
+
+      expect(receipt.textContent).not.toContain("\u20AA");
+      expect(receipt.textContent).toContain("2026");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders cashier products in a vertical scroll area", async () => {

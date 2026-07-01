@@ -378,7 +378,8 @@ export function InvoicesPage() {
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3">
             <p className="text-sm font-normal text-zinc-500">
-              صفحة {toArabicDigits(invoicesQuery.page)} من {toArabicDigits(totalPages)}
+              صفحة <AnimatedDigits value={toArabicDigits(invoicesQuery.page)} /> من{" "}
+              <AnimatedDigits value={toArabicDigits(totalPages)} />
             </p>
             <div className="flex items-center gap-2">
               <Button

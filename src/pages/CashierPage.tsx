@@ -25,7 +25,7 @@ import {
   getPaymentMethodLabel,
   getStockStatus,
 } from "../utils/calculations";
-import { formatCurrency, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
+import { formatCurrency, formatNumber, formatPrintAmount, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
 
 type Notice = {
   type: "success" | "error";
@@ -46,6 +46,7 @@ type ReceiptSnapshot = {
   paymentMethod: PaymentMethod;
   customerName: string;
   storeName: string;
+  printedAt: string;
 };
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
@@ -473,6 +474,7 @@ export function CashierPage() {
       paymentMethod,
       customerName: selectedCustomer?.name ?? "بيع مباشر",
       storeName,
+      printedAt: new Date().toISOString(),
     });
     setPrintRequestId(Date.now());
   };
@@ -961,6 +963,20 @@ export function CashierPage() {
   );
 }
 
+const formatReceiptPrintedAt = (value: string) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
 function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null }) {
   if (!receipt || typeof document === "undefined") {
     return null;
@@ -982,6 +998,10 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
           <span>طريقة الدفع</span>
           <strong>{getPaymentMethodLabel(receipt.paymentMethod)}</strong>
         </div>
+        <div>
+          <span>التاريخ</span>
+          <strong>{formatReceiptPrintedAt(receipt.printedAt)}</strong>
+        </div>
       </div>
 
       <table className="print-receipt__items">
@@ -1000,8 +1020,8 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
                 <span>{toArabicDigits(item.productName)}</span>
               </td>
               <td>{formatNumber(item.quantity)}</td>
-              <td>{formatCurrency(item.price)}</td>
-              <td>{formatCurrency(item.total)}</td>
+              <td>{formatPrintAmount(item.price)}</td>
+              <td>{formatPrintAmount(item.total)}</td>
             </tr>
           ))}
         </tbody>
@@ -1010,15 +1030,15 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
       <dl className="print-receipt__totals">
         <div>
           <dt>المجموع</dt>
-          <dd>{formatCurrency(receipt.total)}</dd>
+          <dd>{formatPrintAmount(receipt.total)}</dd>
         </div>
         <div>
           <dt>المدفوع</dt>
-          <dd>{formatCurrency(receipt.paid)}</dd>
+          <dd>{formatPrintAmount(receipt.paid)}</dd>
         </div>
         <div>
           <dt>المتبقي</dt>
-          <dd>{formatCurrency(receipt.remaining)}</dd>
+          <dd>{formatPrintAmount(receipt.remaining)}</dd>
         </div>
       </dl>
 

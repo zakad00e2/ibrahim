@@ -11,6 +11,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { StatusBadge } from "../components/StatusBadge";
 import { toUserFacingMessage } from "../services/apiClient";
@@ -361,37 +362,37 @@ export function SuperAdminDashboardPage() {
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">إجمالي المتاجر</p>
             <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">
-              {formatNumber(stats.totalStores)}
+              <AnimatedDigits value={formatNumber(stats.totalStores)} />
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">بانتظار الموافقة</p>
             <p className="mt-1 text-2xl font-medium text-amber-700 sm:text-3xl">
-              {formatNumber(stats.pendingStores)}
+              <AnimatedDigits value={formatNumber(stats.pendingStores)} />
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">متاجر نشطة</p>
             <p className="mt-1 text-2xl font-medium text-emerald-700 sm:text-3xl">
-              {formatNumber(stats.approvedStores)}
+              <AnimatedDigits value={formatNumber(stats.approvedStores)} />
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">المستخدمون</p>
             <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">
-              {formatNumber(stats.totalUsers)}
+              <AnimatedDigits value={formatNumber(stats.totalUsers)} />
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">المنتجات</p>
             <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">
-              {formatNumber(stats.totalProducts)}
+              <AnimatedDigits value={formatNumber(stats.totalProducts)} />
             </p>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-zinc-500">العملاء</p>
             <p className="mt-1 text-2xl font-medium text-zinc-950 sm:text-3xl">
-              {formatNumber(stats.totalCustomers)}
+              <AnimatedDigits value={formatNumber(stats.totalCustomers)} />
             </p>
           </div>
         </section>
@@ -479,9 +480,15 @@ export function SuperAdminDashboardPage() {
                                   {status.label}
                                 </StatusBadge>
                               </td>
-                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.users)}</td>
-                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.products)}</td>
-                              <td className="px-4 py-3 font-medium">{formatNumber(store.counts.customers)}</td>
+                              <td className="px-4 py-3 font-medium">
+                                <AnimatedDigits value={formatNumber(store.counts.users)} />
+                              </td>
+                              <td className="px-4 py-3 font-medium">
+                                <AnimatedDigits value={formatNumber(store.counts.products)} />
+                              </td>
+                              <td className="px-4 py-3 font-medium">
+                                <AnimatedDigits value={formatNumber(store.counts.customers)} />
+                              </td>
                               <td className="px-4 py-3 text-zinc-600">{displayDate(store.createdAt)}</td>
                               <td className={getAdminStoreActionCellClass(isSelected)}>
                                 <div className="flex flex-wrap items-center gap-2">

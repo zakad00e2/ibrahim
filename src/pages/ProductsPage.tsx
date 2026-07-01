@@ -216,7 +216,8 @@ export function ProductsPage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-medium text-zinc-500">الصفحة الحالية</p>
           <p className="mt-1 text-sm font-medium text-brand-700 sm:text-base">
-            {toArabicDigits(String(currentPage))} / {toArabicDigits(String(totalPages))}
+            <AnimatedDigits value={toArabicDigits(String(currentPage))} /> /{" "}
+            <AnimatedDigits value={toArabicDigits(String(totalPages))} />
           </p>
         </div>
       </section>
@@ -305,7 +306,7 @@ export function ProductsPage() {
                           <AnimatedDigits value={formatNumber(product.stock)} />
                         </td>
                         <td className="px-4 py-3 font-normal text-zinc-500">
-                          {toArabicDigits(String(product.minStock))}
+                          <AnimatedDigits value={toArabicDigits(String(product.minStock))} />
                         </td>
                         <td className="px-4 py-3">
                           <StatusBadge className="!font-normal" tone={status.tone} size="sm">
@@ -346,8 +347,9 @@ export function ProductsPage() {
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3">
             <p className="text-sm font-normal text-zinc-500">
-              صفحة {toArabicDigits(String(currentPage))} من {toArabicDigits(String(totalPages))} - إجمالي{" "}
-              {toArabicDigits(String(productsTotal))} منتج
+              صفحة <AnimatedDigits value={toArabicDigits(String(currentPage))} /> من{" "}
+              <AnimatedDigits value={toArabicDigits(String(totalPages))} /> - إجمالي{" "}
+              <AnimatedDigits value={toArabicDigits(String(productsTotal))} /> منتج
             </p>
             <div className="flex items-center gap-2">
               <button

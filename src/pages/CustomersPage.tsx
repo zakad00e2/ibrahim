@@ -417,7 +417,8 @@ export function CustomersPage() {
         {totalPages > 1 ? (
           <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3">
             <p className="text-sm font-normal text-zinc-500">
-              صفحة {toArabicDigits(currentPage)} من {toArabicDigits(totalPages)}
+              صفحة <AnimatedDigits value={toArabicDigits(currentPage)} /> من{" "}
+              <AnimatedDigits value={toArabicDigits(totalPages)} />
             </p>
             <div className="flex items-center gap-2">
               <Button
