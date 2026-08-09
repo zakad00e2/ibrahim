@@ -9,6 +9,22 @@ export const calculateInvoiceItemTotal = (price: number, quantity: number) =>
 export const calculateItemsTotal = (items: InvoiceItem[]) =>
   sumMoney(items.map((item) => calculateInvoiceItemTotal(item.price, item.quantity)));
 
+export const calculateInvoiceTotal = (items: InvoiceItem[], discount = 0) =>
+  subtractMoney(calculateItemsTotal(items), discount);
+
+export type InvoiceDiscountValidationError = "invalid-discount" | "discount-exceeds-subtotal";
+
+export const validateInvoiceDiscount = (
+  subtotal: number,
+  discount: number,
+): InvoiceDiscountValidationError | null => {
+  if (!Number.isFinite(discount) || discount < 0) {
+    return "invalid-discount";
+  }
+
+  return compareMoney(discount, subtotal) === 1 ? "discount-exceeds-subtotal" : null;
+};
+
 export const calculateInvoiceItemCost = (wholesalePrice: number, quantity: number) =>
   multiplyMoney(wholesalePrice, quantity);
 
