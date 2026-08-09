@@ -141,4 +141,12 @@ describe("invoicesApi", () => {
     expect(JSON.parse(String(init.body))).not.toHaveProperty("clientInvoiceId");
     expect(JSON.parse(String(init.body))).not.toHaveProperty("clientOperationId");
   });
+
+  it("preserves carton sale units in invoice requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "i3", number: 3, total: 240, paid: 240, remaining: 0, items: [], paymentMethod: "CASH" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await createInvoice({ items: [{ productId: "p1", productName: "Tea", barcode: "1", price: 240, wholesalePrice: 180, quantity: 1, total: 240, saleUnit: "carton", stockQuantity: 12 }], paymentMethod: "cash" });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ items: [{ productId: "p1", quantity: 1, saleUnit: "carton" }] });
+  });
 });

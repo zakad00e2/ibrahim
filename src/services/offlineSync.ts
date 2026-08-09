@@ -7,6 +7,7 @@ import {
   getCustomerDebtTotal,
 } from "../utils/calculations";
 import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney } from "../utils/money";
+import { getInvoiceItemStockQuantity, getSaleUnit } from "../utils/carton";
 
 const networkErrorMessages = [
   "failed to fetch",
@@ -185,11 +186,12 @@ export const buildOfflineCustomer = (
 export const buildInvoiceItems = (items: InvoiceItem[], products: Product[]): InvoiceItem[] => {
   return items.map((item) => {
     const product = products.find((candidate) => candidate.id === item.productId);
-    const price = Number.isFinite(item.price) && item.price > 0 ? item.price : (product?.price ?? 0);
-    const wholesalePrice =
-      Number.isFinite(item.wholesalePrice) && item.wholesalePrice > 0
-        ? item.wholesalePrice
-        : (product?.wholesalePrice ?? 0);
+    const saleUnit = getSaleUnit(item);
+    const isCarton = saleUnit === "carton";
+    const piecesPerCarton = product?.piecesPerCarton;
+    const stockQuantity = isCarton ? item.quantity * (piecesPerCarton ?? 0) : item.quantity;
+    const price = isCarton ? (product?.cartonSalePrice ?? item.price) : (Number.isFinite(item.price) && item.price > 0 ? item.price : (product?.price ?? 0));
+    const wholesalePrice = isCarton ? (product?.cartonPurchasePrice ?? item.wholesalePrice) : (Number.isFinite(item.wholesalePrice) && item.wholesalePrice > 0 ? item.wholesalePrice : (product?.wholesalePrice ?? 0));
 
     return {
       productId: item.productId,
@@ -199,6 +201,8 @@ export const buildInvoiceItems = (items: InvoiceItem[], products: Product[]): In
       wholesalePrice,
       quantity: item.quantity,
       total: calculateInvoiceItemTotal(price, item.quantity),
+      saleUnit,
+      stockQuantity,
     };
   });
 };
@@ -207,10 +211,9 @@ export const applyOfflineSaleToProducts = (
   products: Product[],
   soldItems: InvoiceItem[],
 ): Product[] => {
-  return products.map((product) => {
-    const soldItem = soldItems.find((item) => item.productId === product.id);
-    return soldItem ? { ...product, stock: Math.max(product.stock - soldItem.quantity, 0) } : product;
-  });
+  const soldByProduct = new Map<string, number>();
+  soldItems.forEach((item) => soldByProduct.set(item.productId, (soldByProduct.get(item.productId) ?? 0) + getInvoiceItemStockQuantity(item)));
+  return products.map((product) => ({ ...product, stock: Math.max(product.stock - (soldByProduct.get(product.id) ?? 0), 0) }));
 };
 
 export const applyCustomerDebtPayment = (
