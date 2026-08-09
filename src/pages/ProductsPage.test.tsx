@@ -128,3 +128,30 @@ describe("ProductsPage delete confirmation", () => {
     expect(storeMocks.deleteProduct).toHaveBeenCalledWith("product-1");
   });
 });
+
+describe("ProductsPage carton entry", () => {
+  let mounted: { container: HTMLDivElement; root: Root } | null;
+
+  beforeEach(() => {
+    mounted = null;
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    if (mounted) {
+      await act(async () => mounted?.root.unmount());
+      mounted.container.remove();
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("shows optional carton data controls when adding a product", async () => {
+    mounted = await renderProductsPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "إضافة منتج").click();
+    });
+
+    expect(document.body.textContent).toContain("بيانات الكرتونة");
+  });
+});

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProduct, getProductById, updateProduct } from "./productsApi";
+import { createProduct, getProductById, mapProduct, updateProduct } from "./productsApi";
 import type { Product, ProductInput } from "../types";
 
 const makeProductInput = (overrides: Partial<ProductInput> = {}): ProductInput => ({
@@ -124,6 +124,43 @@ describe("productsApi barcode uniqueness", () => {
     await expect(getProductById("p1")).resolves.toMatchObject({
       price: 0.3,
       wholesalePrice: 0.1,
+    });
+  });
+
+  it("maps optional carton data without changing legacy products", () => {
+    expect(mapProduct({ id: "legacy", name: "Legacy", barcode: "1", price: 8, stock: 9 }))
+      .toMatchObject({ id: "legacy", stock: 9 });
+    expect(mapProduct({ id: "legacy", name: "Legacy", barcode: "1", price: 8, stock: 9 }))
+      .not.toHaveProperty("piecesPerCarton");
+
+    expect(mapProduct({
+      id: "carton", name: "Tea", barcode: "2", price: 5, stock: 24,
+      piecesPerCarton: 12, cartonPurchasePrice: "180", cartonSalePrice: "240",
+    })).toMatchObject({ piecesPerCarton: 12, cartonPurchasePrice: 180, cartonSalePrice: 240 });
+  });
+
+  it("sends carton entry data only when it is provided", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "Not found" }, 404))
+      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "carton", wholesalePrice: 15 })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createProduct(makeProductInput({
+      stock: 36,
+      wholesalePrice: 15,
+      piecesPerCarton: 12,
+      cartonCount: 3,
+      cartonPurchasePrice: 180,
+      cartonSalePrice: 240,
+    }));
+
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit).body));
+    expect(requestBody).toMatchObject({
+      piecesPerCarton: 12,
+      cartonCount: 3,
+      cartonPurchasePrice: 180,
+      cartonSalePrice: 240,
     });
   });
 });
