@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Camera, ChevronLeft, ChevronRight, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { Button } from "../components/Button";
@@ -70,6 +71,13 @@ export function ProductsPage() {
 
   const totalPages = Math.max(1, Math.ceil(productsTotal / LIMIT));
   const currentPage = productsQuery.page;
+  const cartonWholesalePreview = useMemo(() => {
+    if (!form.cartonEnabled || editingProduct) return null;
+    const piecesPerCarton = parseLocalizedNumber(form.piecesPerCarton);
+    const cartonPurchasePrice = parseLocalizedNumber(form.cartonPurchasePrice);
+    if (piecesPerCarton === null || cartonPurchasePrice === null || !Number.isInteger(piecesPerCarton) || piecesPerCarton <= 0 || cartonPurchasePrice < 0) return null;
+    return deriveCartonValues({ cartonCount: 1, piecesPerCarton, cartonPurchasePrice }).wholesalePrice;
+  }, [editingProduct, form.cartonEnabled, form.cartonPurchasePrice, form.piecesPerCarton]);
 
   const handleSearchChange = useCallback(
     (raw: string) => {
@@ -486,9 +494,10 @@ export function ProductsPage() {
               <input
                 type="text"
                 inputMode="decimal"
-                value={toArabicDigits(form.wholesalePrice)}
+                value={toArabicDigits(String(cartonWholesalePreview ?? form.wholesalePrice))}
+                readOnly={cartonWholesalePreview !== null}
                 onChange={(e) => setForm((c) => ({ ...c, wholesalePrice: normalizeDigits(e.target.value) }))}
-                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100 read-only:bg-brand-50"
               />
             </label>
           </div>
@@ -520,6 +529,7 @@ export function ProductsPage() {
                   <span className="mb-2 block text-sm font-normal text-zinc-900">سعر بيع الكرتونة</span>
                   <input type="text" inputMode="decimal" value={toArabicDigits(form.cartonSalePrice)} onChange={(e) => setForm((c) => ({ ...c, cartonSalePrice: normalizeDigits(e.target.value) }))} className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100" />
                 </label>
+                {cartonWholesalePreview !== null ? <p className="sm:col-span-2 rounded-md bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700">سعر جملة القطعة المحسوب: {formatCurrency(cartonWholesalePreview)}</p> : null}
               </div>
             ) : null}
           </div>

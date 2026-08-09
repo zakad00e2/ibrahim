@@ -154,4 +154,29 @@ describe("ProductsPage carton entry", () => {
 
     expect(document.body.textContent).toContain("بيانات الكرتونة");
   });
+
+  it("shows the calculated piece wholesale price while entering carton data", async () => {
+    mounted = await renderProductsPage();
+    await act(async () => findButtonByText(mounted!.container, "إضافة منتج").click());
+
+    const checkbox = document.querySelector('input[type="checkbox"]');
+    if (!(checkbox instanceof HTMLInputElement)) throw new Error("Carton toggle was not rendered");
+    await act(async () => checkbox.click());
+
+    const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
+    const piecesInput = inputs.find((input) => input.parentElement?.textContent?.includes("عدد القطع في الكرتونة"));
+    const purchaseInput = inputs.find((input) => input.parentElement?.textContent?.includes("سعر شراء الكرتونة"));
+    if (!(piecesInput instanceof HTMLInputElement) || !(purchaseInput instanceof HTMLInputElement)) throw new Error("Carton inputs were not rendered");
+
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setValue?.call(piecesInput, "12");
+      piecesInput.dispatchEvent(new Event("input", { bubbles: true }));
+      setValue?.call(purchaseInput, "180");
+      purchaseInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("سعر جملة القطعة المحسوب");
+    expect(document.body.textContent).toContain("١٥");
+  });
 });
