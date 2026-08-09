@@ -274,6 +274,29 @@ describe("AppStore product actions", () => {
     document.body.innerHTML = "";
   });
 
+  it("rejects a discount greater than the items subtotal before saving the sale", async () => {
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().products).toEqual([existingProduct]);
+    });
+
+    let result: Awaited<ReturnType<StoreSnapshot["completeSale"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().completeSale({
+        ...queuedSaleRequest,
+        discount: 20.01,
+      });
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "الخصم لا يمكن أن يتجاوز المجموع",
+    });
+    expect(invoiceApiMocks.createInvoice).not.toHaveBeenCalled();
+  });
+
   it("adds a created product to local product state and total without refetching the list", async () => {
     const mounted = await renderStore();
     mountedRoots.push(mounted);
