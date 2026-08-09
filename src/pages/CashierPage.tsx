@@ -21,12 +21,15 @@ import { useAppStore, type CashierDraft } from "../store/AppStore";
 import type { InvoiceItem, PaymentMethod, Product } from "../types";
 import {
   calculateInvoiceItemTotal,
+  calculateInvoiceTotal,
   calculateItemsTotal,
   findProductByBarcode,
   getPaymentMethodLabel,
   getStockStatus,
+  validateInvoiceDiscount,
 } from "../utils/calculations";
 import { formatCurrency, formatNumber, formatPrintAmount, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
+import { maxMoney, subtractMoney } from "../utils/money";
 
 type Notice = {
   type: "success" | "error";
@@ -41,6 +44,8 @@ type CustomerForm = {
 
 type ReceiptSnapshot = {
   items: InvoiceItem[];
+  subtotal: number;
+  discount: number;
   total: number;
   paid: number;
   remaining: number;
@@ -71,7 +76,7 @@ export function CashierPage() {
     setCashierDraft,
     resetCashierDraft,
   } = useAppStore();
-  const { items, paymentMethod, selectedCustomerId, customerSearch, paidAmount } = cashierDraft;
+  const { items, paymentMethod, selectedCustomerId, customerSearch, paidAmount, discount } = cashierDraft;
   const [barcode, setBarcode] = useState("");
   const [search, setSearch] = useState("");
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -117,6 +122,13 @@ export function CashierPage() {
     setCashierDraft((current) => ({
       ...current,
       paidAmount: resolveSetState(value, current.paidAmount),
+    }));
+  }, [setCashierDraft]);
+
+  const setDiscount = useCallback((value: SetStateAction<CashierDraft["discount"]>) => {
+    setCashierDraft((current) => ({
+      ...current,
+      discount: resolveSetState(value, current.discount),
     }));
   }, [setCashierDraft]);
 
@@ -204,10 +216,17 @@ export function CashierPage() {
     );
   }, [customers, customerSearch]);
 
-  const total = useMemo(() => calculateItemsTotal(items), [items]);
+  const subtotal = useMemo(() => calculateItemsTotal(items), [items]);
+  const enteredDiscount = Number(normalizeDigits(discount || "0"));
+  const discountError = validateInvoiceDiscount(subtotal, enteredDiscount);
+  const discountAmount = discountError ? 0 : enteredDiscount;
+  const total = useMemo(
+    () => calculateInvoiceTotal(items, discountAmount),
+    [discountAmount, items],
+  );
   const effectivePaid =
     paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
-  const remaining = Math.max(total - (Number.isFinite(effectivePaid) ? effectivePaid : 0), 0);
+  const remaining = maxMoney(subtractMoney(total, Number.isFinite(effectivePaid) ? effectivePaid : 0), 0);
 
   const addProductToInvoice = (product: Product) => {
     if (product.stock === 0) {
@@ -263,6 +282,7 @@ export function CashierPage() {
         paymentMethod,
         customerId: selectedCustomerId || undefined,
         paidAmount: Number(normalizeDigits(paidAmount || "0")),
+        discount: enteredDiscount,
       });
 
       setNotice({ type: result.ok ? "success" : "error", text: result.message });
@@ -275,7 +295,7 @@ export function CashierPage() {
     } finally {
       setSaleSubmitting(false);
     }
-  }, [completeSale, items, paidAmount, paymentMethod, resetCashierDraft, selectedCustomerId]);
+  }, [completeSale, enteredDiscount, items, paidAmount, paymentMethod, resetCashierDraft, selectedCustomerId]);
 
   const addByBarcode = useCallback(
     (code: string) => {
@@ -454,6 +474,16 @@ export function CashierPage() {
       return;
     }
 
+    if (discountError === "invalid-discount") {
+      setNotice({ type: "error", text: "أدخل مبلغ خصم صحيح قبل الطباعة" });
+      return;
+    }
+
+    if (discountError === "discount-exceeds-subtotal") {
+      setNotice({ type: "error", text: "الخصم لا يمكن أن يتجاوز المجموع" });
+      return;
+    }
+
     const paid =
       paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
 
@@ -469,9 +499,11 @@ export function CashierPage() {
 
     setPrintReceipt({
       items: items.map((item) => ({ ...item })),
+      subtotal,
+      discount: discountAmount,
       total,
       paid,
-      remaining: Math.max(total - paid, 0),
+      remaining: maxMoney(subtractMoney(total, paid), 0),
       paymentMethod,
       customerName: selectedCustomer?.name ?? "بيع مباشر",
       storeName,
@@ -764,7 +796,28 @@ export function CashierPage() {
         <dl className="mt-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <dt className="font-normal text-zinc-500">المجموع الكلي</dt>
-            <dd className="shrink-0 text-left text-xl font-normal text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(total)} /></dd>
+            <dd className="shrink-0 text-left text-xl font-normal text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(subtotal)} /></dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-normal text-zinc-500">
+              <label htmlFor="invoice-discount">خصم الفاتورة</label>
+            </dt>
+            <dd className="w-32 shrink-0">
+              <input
+                id="invoice-discount"
+                aria-label="خصم الفاتورة"
+                type="text"
+                inputMode="decimal"
+                value={toArabicDigits(discount)}
+                onChange={(event) => setDiscount(normalizeDigits(event.target.value))}
+                placeholder="٠"
+                className="h-10 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-left text-sm font-normal text-zinc-950 outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+              />
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-medium text-zinc-900">المجموع بعد الخصم</dt>
+            <dd className="shrink-0 text-left text-xl font-medium text-zinc-950 sm:text-2xl"><AnimatedDigits value={formatCurrency(total)} /></dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="font-normal text-zinc-500">المبلغ المدفوع</dt>
@@ -1046,10 +1099,27 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
       </table>
 
       <dl className="print-receipt__totals">
-        <div>
-          <dt>المجموع</dt>
-          <dd>{formatPrintAmount(receipt.total)}</dd>
-        </div>
+        {receipt.discount > 0 ? (
+          <>
+            <div>
+              <dt>المجموع</dt>
+              <dd>{formatPrintAmount(receipt.subtotal)}</dd>
+            </div>
+            <div>
+              <dt>الخصم</dt>
+              <dd>{formatPrintAmount(receipt.discount)}</dd>
+            </div>
+            <div>
+              <dt>المجموع بعد الخصم</dt>
+              <dd>{formatPrintAmount(receipt.total)}</dd>
+            </div>
+          </>
+        ) : (
+          <div>
+            <dt>المجموع</dt>
+            <dd>{formatPrintAmount(receipt.total)}</dd>
+          </div>
+        )}
         <div>
           <dt>المدفوع</dt>
           <dd>{formatPrintAmount(receipt.paid)}</dd>
