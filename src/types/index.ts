@@ -1,5 +1,7 @@
 export type PaymentMethod = "cash" | "debt" | "partial";
 
+export type SaleUnit = "unit" | "carton";
+
 export type Product = {
   id: string;
   name: string;
@@ -9,6 +11,9 @@ export type Product = {
   stock: number;
   minStock: number;
   isActive: boolean;
+  piecesPerCarton?: number;
+  cartonPurchasePrice?: number;
+  cartonSalePrice?: number;
 };
 
 export type StoreInfo = {
@@ -64,6 +69,8 @@ export type InvoiceItem = {
   wholesalePrice: number;
   quantity: number;
   total: number;
+  saleUnit?: SaleUnit;
+  stockQuantity?: number;
 };
 
 export type Invoice = {
@@ -88,6 +95,10 @@ export type ProductInput = {
   stock: number;
   minStock: number;
   isActive?: boolean;
+  piecesPerCarton?: number;
+  cartonPurchasePrice?: number;
+  cartonSalePrice?: number;
+  cartonCount?: number;
 };
 
 export type CustomerInput = {
