@@ -73,6 +73,7 @@ describe("offlineSync", () => {
       paymentMethod: "partial",
       customerId: "c1",
       paidAmount: 5,
+      discount: 2,
     };
 
     expect(
@@ -81,9 +82,10 @@ describe("offlineSync", () => {
       id: "offline-invoice-1779012000000",
       number: "OFFLINE-1779012000000",
       customerName: "Ibrahim",
-      total: 20,
+      discount: 2,
+      total: 18,
       paid: 5,
-      remaining: 15,
+      remaining: 13,
       paymentMethod: "partial",
     });
   });

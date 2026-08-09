@@ -2,8 +2,8 @@ import type { Customer, CustomerInput, Invoice, InvoiceItem, Product, SaleReques
 import type { OfflineOperation } from "./offlineDb";
 import {
   calculateCustomerDebt,
+  calculateInvoiceTotal,
   calculateInvoiceItemTotal,
-  calculateItemsTotal,
   getCustomerDebtTotal,
 } from "../utils/calculations";
 import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney } from "../utils/money";
@@ -125,7 +125,8 @@ export const buildOfflineInvoice = (
   localId?: string,
 ): Invoice => {
   const items = buildInvoiceItems(request.items, products);
-  const total = calculateItemsTotal(items);
+  const discount = Number(request.discount ?? 0);
+  const total = calculateInvoiceTotal(items, discount);
   const paid =
     request.paymentMethod === "cash"
       ? total
@@ -141,6 +142,7 @@ export const buildOfflineInvoice = (
     customerId: request.customerId,
     customerName: customer?.name ?? "بيع مباشر",
     items,
+    discount,
     total,
     paid,
     remaining: maxMoney(subtractMoney(total, paid), 0),

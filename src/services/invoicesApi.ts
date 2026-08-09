@@ -110,6 +110,9 @@ export const mapInvoice = (dto: unknown): Invoice => {
   const total = parseMoney(
     dto.total ?? dto.totalAmount ?? dto.total_amount ?? dto.amount ?? dto.grandTotal ?? dto.grand_total,
   );
+  const discount = parseMoney(
+    dto.discount ?? dto.discountAmount ?? dto.discount_amount,
+  );
   const rawPaid =
     dto.paid ??
     dto.paidAmount ??
@@ -154,6 +157,7 @@ export const mapInvoice = (dto: unknown): Invoice => {
     customerName,
     notes: typeof dto.notes === "string" ? dto.notes : undefined,
     items: rawItems.map(mapInvoiceItem),
+    discount,
     total,
     paid,
     remaining,
@@ -260,6 +264,7 @@ export const createInvoice = async (
     paymentMethod: paymentMethodMap[request.paymentMethod],
     customerId: request.customerId,
     paid: request.paymentMethod === "partial" ? request.paidAmount : undefined,
+    discount: request.discount ?? 0,
     clientInvoiceId: options.clientInvoiceId,
     items: request.items.map((item) => ({
       productId: item.productId,

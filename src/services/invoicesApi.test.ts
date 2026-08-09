@@ -19,6 +19,7 @@ describe("invoicesApi", () => {
         id: "i1",
         number: 12,
         createdAt: "2026-05-22T10:00:00.000Z",
+        discountAmount: "2.50",
         total: "100.25",
         paid: "40.10",
         remaining: "60.15",
@@ -42,6 +43,7 @@ describe("invoicesApi", () => {
 
     await expect(listInvoices({ page: 1, limit: 100 })).resolves.toEqual({
       items: [expect.objectContaining({
+        discount: 2.5,
         total: 100.25,
         paid: 40.1,
         remaining: 60.15,
@@ -99,6 +101,7 @@ describe("invoicesApi", () => {
         total: 20,
       }],
       paymentMethod: "cash",
+      discount: 2.5,
     };
 
     await createInvoice(request, { clientInvoiceId: "offline-invoice-1779012000000" });
@@ -106,6 +109,7 @@ describe("invoicesApi", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toMatchObject({
       paymentMethod: "CASH",
+      discount: 2.5,
       clientInvoiceId: "offline-invoice-1779012000000",
       items: [{ productId: "product-1", quantity: 2 }],
     });
