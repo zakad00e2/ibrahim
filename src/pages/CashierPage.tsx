@@ -18,7 +18,8 @@ import { Modal } from "../components/Modal";
 import { StatusBadge } from "../components/StatusBadge";
 import { DEFAULT_STORE_NAME, getStoreInfo } from "../services/storeApi";
 import { useAppStore, type CashierDraft } from "../store/AppStore";
-import type { InvoiceItem, PaymentMethod, Product } from "../types";
+import type { InvoiceItem, PaymentMethod, Product, SaleUnit } from "../types";
+import { getInvoiceItemKey, getInvoiceItemStockQuantity } from "../utils/carton";
 import {
   calculateInvoiceItemTotal,
   calculateItemsTotal,
@@ -209,29 +210,32 @@ export function CashierPage() {
     paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
   const remaining = Math.max(total - (Number.isFinite(effectivePaid) ? effectivePaid : 0), 0);
 
-  const addProductToInvoice = (product: Product) => {
+  const addProductToInvoice = (product: Product, saleUnit: SaleUnit = "unit") => {
+    const pieces = saleUnit === "carton" ? product.piecesPerCarton ?? 0 : 1;
+    if (saleUnit === "carton" && (!pieces || product.cartonSalePrice === undefined || product.cartonPurchasePrice === undefined)) return;
     if (product.stock === 0) {
       setNotice({ type: "error", text: "هذا المنتج نفد من المخزون" });
       return;
     }
 
-    const currentItem = items.find((item) => item.productId === product.id);
-
-    if (currentItem && currentItem.quantity >= product.stock) {
+    const currentItem = items.find((item) => getInvoiceItemKey(item) === `${product.id}:${saleUnit}`);
+    const reserved = items.filter((item) => item.productId === product.id).reduce((sum, item) => sum + getInvoiceItemStockQuantity(item), 0);
+    if (reserved + pieces > product.stock) {
       setNotice({ type: "error", text: "لا توجد كمية إضافية متوفرة من هذا المنتج" });
       return;
     }
 
     setItems((current) => {
-      const existing = current.find((item) => item.productId === product.id);
+      const existing = current.find((item) => getInvoiceItemKey(item) === `${product.id}:${saleUnit}`);
 
       if (existing) {
         return current.map((item) =>
-          item.productId === product.id && item.quantity < product.stock
+          getInvoiceItemKey(item) === `${product.id}:${saleUnit}`
             ? {
                 ...item,
                 quantity: item.quantity + 1,
                 total: calculateInvoiceItemTotal(item.price, item.quantity + 1),
+                stockQuantity: getInvoiceItemStockQuantity(item) + pieces,
               }
             : item,
         );
@@ -243,10 +247,12 @@ export function CashierPage() {
           productId: product.id,
           productName: product.name,
           barcode: product.barcode,
-          price: product.price,
-          wholesalePrice: product.wholesalePrice,
+          price: saleUnit === "carton" ? product.cartonSalePrice! : product.price,
+          wholesalePrice: saleUnit === "carton" ? product.cartonPurchasePrice! : product.wholesalePrice,
           quantity: 1,
-          total: product.price,
+          total: saleUnit === "carton" ? product.cartonSalePrice! : product.price,
+          saleUnit,
+          stockQuantity: pieces,
         },
       ];
     });
@@ -572,13 +578,8 @@ export function CashierPage() {
               const status = getStockStatus(product.stock);
 
               return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => addProductToInvoice(product)}
-                  disabled={product.stock === 0}
-                  className="flex min-h-28 min-w-0 flex-col rounded-lg border border-zinc-200 bg-white p-3 text-right transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:opacity-60 sm:min-h-32"
-                >
+                <div key={product.id} className="flex min-h-28 min-w-0 flex-col rounded-lg border border-zinc-200 bg-white p-3 text-right sm:min-h-32">
+                  <button type="button" onClick={() => addProductToInvoice(product)} disabled={product.stock === 0} className="flex min-w-0 flex-1 flex-col text-right transition hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-60">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="break-words font-medium text-zinc-950">{toArabicDigits(product.name)}</p>
@@ -592,7 +593,13 @@ export function CashierPage() {
                       <span className="font-normal text-zinc-500">المخزون: <AnimatedDigits value={formatNumber(product.stock)} /></span>
                     </div>
                   </div>
-                </button>
+                  </button>
+                  {product.piecesPerCarton && product.cartonSalePrice !== undefined ? (
+                    <button type="button" onClick={() => addProductToInvoice(product, "carton")} disabled={product.stock < product.piecesPerCarton} className="mt-2 h-8 rounded-md border border-brand-200 bg-brand-50 px-2 text-xs font-bold text-brand-700 disabled:cursor-not-allowed disabled:opacity-50">
+                      إضافة كرتونة · {formatCurrency(product.cartonSalePrice)}
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
           </div>
