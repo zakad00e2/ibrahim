@@ -622,10 +622,10 @@ export function CashierPage() {
                 </div>
               ) : (
                 items.map((item) => (
-                  <article key={item.productId} className="rounded-lg border border-zinc-200 bg-white p-3">
+                  <article key={getInvoiceItemKey(item)} className="rounded-lg border border-zinc-200 bg-white p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h4 className="break-words text-sm font-medium text-zinc-950">{toArabicDigits(item.productName)}</h4>
+                        <h4 className="break-words text-sm font-medium text-zinc-950">{toArabicDigits(item.productName)} <span className="text-xs text-zinc-500">({item.saleUnit === "carton" ? "كرتونة" : "قطعة"})</span></h4>
                         <p className="mt-1 break-all text-xs font-normal text-zinc-500">{item.barcode}</p>
                       </div>
                       <Button
@@ -707,9 +707,9 @@ export function CashierPage() {
                     </tr>
                   ) : (
                     items.map((item) => (
-                      <tr key={item.productId}>
+                      <tr key={getInvoiceItemKey(item)}>
                         <td className="px-4 py-2 font-normal text-zinc-950">
-                          <span className="line-clamp-2 break-words">{toArabicDigits(item.productName)}</span>
+                          <span className="line-clamp-2 break-words">{toArabicDigits(item.productName)} <span className="text-xs text-zinc-500">({item.saleUnit === "carton" ? "كرتونة" : "قطعة"})</span></span>
                         </td>
                         <td className="px-4 py-2 text-base font-normal"><AnimatedDigits value={formatCurrency(item.price)} /></td>
                         <td className="px-4 py-2 text-center">
@@ -1040,9 +1040,9 @@ function PrintableInvoiceReceipt({ receipt }: { receipt: ReceiptSnapshot | null 
         </thead>
         <tbody>
           {receipt.items.map((item) => (
-            <tr key={item.productId}>
+            <tr key={getInvoiceItemKey(item)}>
               <td>
-                <span>{toArabicDigits(item.productName)}</span>
+                <span>{toArabicDigits(item.productName)} ({item.saleUnit === "carton" ? "كرتونة" : "قطعة"})</span>
               </td>
               <td>{formatNumber(item.quantity)}</td>
               <td>{formatPrintAmount(item.price)}</td>
