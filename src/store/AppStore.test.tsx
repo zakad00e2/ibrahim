@@ -678,7 +678,7 @@ describe("AppStore product actions", () => {
     expect(customerApiMocks.listCustomers).toHaveBeenCalledWith({ page: 2, limit: 20 });
   });
 
-  it("mirrors and reverses cached customer pages while offline", async () => {
+  it("uses the requested cached customer page without inferring server pagination", async () => {
     const newestCustomer: Customer = {
       id: "cached-newest",
       name: "Newest",
@@ -686,39 +686,26 @@ describe("AppStore product actions", () => {
       debts: [],
       debtBalance: 0,
     };
-    const middleCustomer: Customer = {
-      id: "cached-middle",
-      name: "Middle",
-      phone: "012",
-      debts: [],
-      debtBalance: 0,
-    };
-    const oldestCustomer: Customer = {
-      id: "cached-oldest",
-      name: "Oldest",
-      phone: "013",
-      debts: [],
-      debtBalance: 0,
-    };
     offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
-    offlineDbMocks.listCachedCustomers.mockImplementation(async (_storeKey: string, query: { page?: number }) => {
-      if (query.page === 2) {
-        return { items: [middleCustomer, oldestCustomer], total: 22, page: 2, limit: 20 };
-      }
-      return { items: [newestCustomer], total: 22, page: 1, limit: 20 };
+    offlineDbMocks.listCachedCustomers.mockResolvedValue({
+      items: [newestCustomer],
+      total: 22,
+      page: 1,
+      limit: 20,
     });
 
     const mounted = await renderStore();
     mountedRoots.push(mounted);
 
     await waitFor(() => {
-      expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
+      expect(mounted.getStore().customers).toEqual([newestCustomer]);
     });
     expect(offlineDbMocks.listCachedCustomers).toHaveBeenCalledWith("store:store-1", {
       search: "",
-      page: 2,
+      page: 1,
       limit: 20,
     });
+    expect(offlineDbMocks.listCachedCustomers).toHaveBeenCalledTimes(1);
   });
 
   it("does not prepend a newly created customer to the oldest-first first page", async () => {

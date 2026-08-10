@@ -206,15 +206,6 @@ const getMirroredCustomerPage = (page: number, total: number, limit: number) => 
   return Math.max(1, Math.min(totalPages, totalPages - page + 1));
 };
 
-const listMirroredCachedCustomers = async (storeKey: string, query: CustomersQuery) => {
-  const firstCached = await listCachedCustomers(storeKey, { ...query, page: 1 });
-  const cachePage = getMirroredCustomerPage(query.page, firstCached.total, query.limit);
-  const cached = cachePage === 1
-    ? firstCached
-    : await listCachedCustomers(storeKey, { ...query, page: cachePage });
-  return { ...cached, items: [...cached.items].reverse(), total: firstCached.total };
-};
-
 export const createEmptyCashierDraft = (): CashierDraft => ({
   items: [],
   paymentMethod: "cash",
@@ -577,7 +568,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
-        const cached = await listMirroredCachedCustomers(storeCacheKey, query);
+        const cached = await listCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         return;
@@ -600,7 +591,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        const cached = await listMirroredCachedCustomers(storeCacheKey, query);
+        const cached = await listCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         setCustomersError(null);

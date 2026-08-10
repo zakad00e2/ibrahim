@@ -4,7 +4,7 @@
 
 **Goal:** Render the customer list from oldest to newest, with the UI's first page backed by the API's final page, without backend changes.
 
-**Architecture:** The store first requests page 1 to learn the query total, calculates the mirrored backend page, then resolves that page and reverses its rows. The identical flow applies to the offline cache; customer creation refreshes rather than prepends a newest record to an oldest-first page.
+**Architecture:** The store first requests page 1 to learn the query total, calculates the mirrored backend page, then resolves that page and reverses its rows. Offline cache reads retain their local page order because cache entries lack reliable server-wide ordering metadata; customer creation refreshes rather than prepends a newest record to an oldest-first page.
 
 **Tech Stack:** React 18, TypeScript, Vitest, Dexie offline cache.
 
@@ -19,8 +19,8 @@
 
 ## File Structure
 
-- `src/store/AppStore.tsx` — mirror each UI customer page to its backend/cache page, reverse the resolved rows, and remove the incorrect optimistic prepend after creation.
-- `src/store/AppStore.test.tsx` — prove online, search, offline cache, and create flows expose an oldest-first list.
+- `src/store/AppStore.tsx` — mirror each online UI customer page to its backend page, reverse the resolved rows, and remove the incorrect optimistic prepend after creation.
+- `src/store/AppStore.test.tsx` — prove online and create flows expose an oldest-first list, while offline reads retain their requested local page.
 
 ### Task 1: Add failing mirrored-pagination tests
 

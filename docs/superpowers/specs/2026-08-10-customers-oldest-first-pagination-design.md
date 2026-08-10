@@ -17,7 +17,7 @@ The frontend will translate each visible page number to its mirrored backend pag
 
 The customer rows returned for a backend page are reversed before display. Assuming the backend's default is newest-first, this makes the combined UI sequence oldest-first across all pages. The total count and displayed current page remain UI-oriented and unchanged.
 
-When a search changes, the UI page resets to 1 as it does today, and the mirrored backend page is recalculated from that search result's total. Offline cache reads follow the same mirrored page calculation and row reversal so the experience remains consistent.
+When a search changes, the UI page resets to 1 as it does today, and the mirrored backend page is recalculated from that search result's total. Offline cache reads retain their existing local pagination because the cache does not store the complete server result set or a stable creation-order field; inferring mirrored server pages there could duplicate or skip locally cached records.
 
 ## Error handling
 
@@ -30,4 +30,4 @@ Add focused store tests that prove:
 1. UI page 1 fetches the backend's final page and exposes its rows reversed.
 2. Later UI pages map to preceding backend pages.
 3. Search results use the same mirrored-page behavior.
-4. Offline cached customer results are also mirrored and reversed.
+4. Offline cached customer results use only their requested local page, without inferring a server page order.
