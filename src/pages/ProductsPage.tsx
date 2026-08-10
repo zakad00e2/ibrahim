@@ -197,7 +197,7 @@ export function ProductsPage() {
       barcode: form.barcode.trim(),
       price,
       wholesalePrice: effectiveWholesalePrice,
-      stock: derived?.stock ?? stock,
+      stock,
       minStock,
       isActive: true,
       ...(form.cartonEnabled ? {

@@ -199,6 +199,7 @@ describe("ProductsPage carton entry", () => {
     await act(async () => {
       setInput("اسم المنتج", "شاي");
       setInput("سعر البيع", "3");
+      setInput("الكمية", "100");
       setInput("عدد القطع في الكرتونة", "24");
       setInput("عدد الكراتين", "4");
       setInput("سعر شراء الكرتونة", "20");
@@ -211,7 +212,7 @@ describe("ProductsPage carton entry", () => {
 
     expect(storeMocks.addProduct).toHaveBeenCalledWith(expect.objectContaining({
       wholesalePrice: 0.83,
-      stock: 96,
+      stock: 100,
     }));
   });
 });
