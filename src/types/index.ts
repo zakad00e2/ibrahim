@@ -81,6 +81,7 @@ export type Invoice = {
   customerName?: string;
   notes?: string;
   items: InvoiceItem[];
+  discount?: number;
   total: number;
   paid: number;
   remaining: number;
@@ -112,6 +113,7 @@ export type SaleRequest = {
   paymentMethod: PaymentMethod;
   customerId?: string;
   paidAmount?: number;
+  discount?: number;
 };
 
 export type InvoiceUpdateRequest = {

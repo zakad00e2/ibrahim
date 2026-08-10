@@ -14,6 +14,7 @@ const storeHarness = vi.hoisted(() => {
     selectedCustomerId: "",
     customerSearch: "",
     paidAmount: "",
+    discount: "",
   });
 
   const product = {
@@ -192,6 +193,23 @@ const getPrintButton = (container: HTMLElement) => {
   return button;
 };
 
+const setDiscount = async (container: HTMLElement, value: string) => {
+  const input = container.querySelector('input[aria-label="خصم الفاتورة"]');
+
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error("Invoice discount input was not rendered");
+  }
+
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    valueSetter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+
 describe("CashierPage invoice draft", () => {
   beforeEach(() => {
     storeHarness.resetCashierDraft();
@@ -259,7 +277,43 @@ describe("CashierPage invoice draft", () => {
       paymentMethod: "cash",
       customerId: undefined,
       paidAmount: 0,
+      discount: 0,
     });
+  });
+
+  it("sends the fixed invoice discount when completing a sale", async () => {
+    const view = await renderCashier();
+
+    await clickProduct(view.container);
+    await setDiscount(view.container, "5");
+
+    await act(async () => {
+      getCompleteSaleButton(view.container).click();
+    });
+
+    expect(storeHarness.completeSale).toHaveBeenCalledWith(expect.objectContaining({
+      discount: 5,
+    }));
+  });
+
+  it("prints the discount and final total when the invoice has a discount", async () => {
+    const view = await renderCashier();
+
+    await clickProduct(view.container);
+    await setDiscount(view.container, "5");
+
+    await act(async () => {
+      getPrintButton(view.container).click();
+    });
+
+    const receipt = document.body.querySelector(".print-receipt");
+
+    if (!(receipt instanceof HTMLElement)) {
+      throw new Error("Printable receipt was not rendered");
+    }
+
+    expect(receipt.textContent).toContain("الخصم");
+    expect(receipt.textContent).toContain("المجموع بعد الخصم");
   });
 
   it("renders the printable invoice with a print date and without a currency symbol", async () => {

@@ -82,9 +82,11 @@ import {
 } from "../services/offlineSync";
 import {
   calculateCustomerDebt,
+  calculateInvoiceTotal,
   calculateInvoiceItemTotal,
   calculateItemsTotal,
   getCustomerDebtTotal,
+  validateInvoiceDiscount,
   validateDebtPaymentAmount,
 } from "../utils/calculations";
 import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney, sumMoney } from "../utils/money";
@@ -130,6 +132,7 @@ export type CashierDraft = {
   selectedCustomerId: string;
   customerSearch: string;
   paidAmount: string;
+  discount: string;
 };
 
 type AppStoreValue = {
@@ -212,6 +215,7 @@ export const createEmptyCashierDraft = (): CashierDraft => ({
   selectedCustomerId: "",
   customerSearch: "",
   paidAmount: "",
+  discount: "",
 });
 
 const OFFLINE_WRITE_MESSAGE = "تم حفظ العملية بدون إنترنت وسيتم إرسالها تلقائياً عند عودة الاتصال";
@@ -1101,7 +1105,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       if (request.items.length === 0) return { ok: false, message: "لا يمكن إتمام بيع بدون منتجات" };
 
-      const total = calculateItemsTotal(request.items);
+      const subtotal = calculateItemsTotal(request.items);
+      const discount = Number(request.discount ?? 0);
+      const discountError = validateInvoiceDiscount(subtotal, discount);
+      if (discountError === "invalid-discount") {
+        return { ok: false, message: "أدخل مبلغ خصم صحيح" };
+      }
+      if (discountError === "discount-exceeds-subtotal") {
+        return { ok: false, message: "الخصم لا يمكن أن يتجاوز المجموع" };
+      }
+
+      const total = calculateInvoiceTotal(request.items, discount);
       const customer = request.customerId
         ? customers.find((c) => c.id === request.customerId)
         : undefined;
