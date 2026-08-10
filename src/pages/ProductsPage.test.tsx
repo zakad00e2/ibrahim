@@ -179,4 +179,39 @@ describe("ProductsPage carton entry", () => {
     expect(document.body.textContent).toContain("سعر جملة القطعة المحسوب");
     expect(document.body.textContent).toContain("١٥");
   });
+
+  it("submits a carton product without a manually entered wholesale price", async () => {
+    mounted = await renderProductsPage();
+    await act(async () => findButtonByText(mounted!.container, "إضافة منتج").click());
+    const checkbox = document.querySelector('input[type="checkbox"]');
+    if (!(checkbox instanceof HTMLInputElement)) throw new Error("Carton toggle was not rendered");
+    await act(async () => checkbox.click());
+
+    const setInput = (label: string, value: string) => {
+      const input = Array.from(document.querySelectorAll("input")).find((candidate) =>
+        candidate.parentElement?.textContent?.includes(label),
+      );
+      if (!(input instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    await act(async () => {
+      setInput("اسم المنتج", "شاي");
+      setInput("سعر البيع", "3");
+      setInput("عدد القطع في الكرتونة", "24");
+      setInput("عدد الكراتين", "4");
+      setInput("سعر شراء الكرتونة", "20");
+      setInput("سعر بيع الكرتونة", "30");
+    });
+    await act(async () => {
+      findButtonByText(document.body, "إضافة المنتج").click();
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.addProduct).toHaveBeenCalledWith(expect.objectContaining({
+      wholesalePrice: 0.833333333333,
+      stock: 96,
+    }));
+  });
 });

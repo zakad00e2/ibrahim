@@ -156,11 +156,6 @@ export function ProductsPage() {
       return;
     }
 
-    if (wholesalePrice === null || wholesalePrice < 0) {
-      setMessage({ type: "error", text: "أدخل سعر جملة صحيح" });
-      return;
-    }
-
     if (stock === null || stock < 0) {
       setMessage({ type: "error", text: "أدخل كمية مخزون صحيحة" });
       return;
@@ -190,12 +185,18 @@ export function ProductsPage() {
     const derived = isCreatingCartonProduct
       ? deriveCartonValues({ cartonCount: cartonCount!, piecesPerCarton: piecesPerCarton!, cartonPurchasePrice: cartonPurchasePrice! })
       : null;
+    const effectiveWholesalePrice = derived?.wholesalePrice ?? wholesalePrice;
+
+    if (effectiveWholesalePrice === null || effectiveWholesalePrice < 0) {
+      setMessage({ type: "error", text: "أدخل سعر جملة صحيح" });
+      return;
+    }
 
     const input = {
       name: form.name.trim(),
       barcode: form.barcode.trim(),
       price,
-      wholesalePrice: derived?.wholesalePrice ?? wholesalePrice,
+      wholesalePrice: effectiveWholesalePrice,
       stock: derived?.stock ?? stock,
       minStock,
       isActive: true,
