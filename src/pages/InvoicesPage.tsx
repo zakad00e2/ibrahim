@@ -8,6 +8,7 @@ import { useAppStore } from "../store/AppStore";
 import type { Invoice, InvoiceItem } from "../types";
 import { calculateInvoiceItemTotal, calculateItemsTotal, getPaymentMethodLabel } from "../utils/calculations";
 import { formatCurrency, formatDate, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
+import { getInvoiceItemKey, getSaleUnit } from "../utils/carton";
 
 const paymentTone = {
   cash: "success",
@@ -485,8 +486,8 @@ export function InvoicesPage() {
                     </tr>
                   ) : (
                     selectedInvoice.items.map((item, idx) => (
-                      <tr key={`${selectedInvoice.id}-${item.productId || idx}`}>
-                        <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)}</td>
+                      <tr key={`${selectedInvoice.id}-${getInvoiceItemKey(item) || idx}`}>
+                        <td className="px-4 py-3 font-normal text-zinc-950">{toArabicDigits(item.productName)} <span className="text-xs text-zinc-500">({getSaleUnit(item) === "carton" ? "كرتونة" : "قطعة"})</span></td>
                         <td className="px-4 py-3 font-semibold">
                           <AnimatedDigits value={formatCurrency(item.price)} />
                         </td>
@@ -583,9 +584,9 @@ export function InvoicesPage() {
                       </tr>
                     ) : (
                       editItems.map((item) => (
-                        <tr key={`${editingInvoice.id}-edit-${item.productId}`}>
+                        <tr key={`${editingInvoice.id}-edit-${getInvoiceItemKey(item)}`}>
                           <td className="px-4 py-3">
-                            <p className="font-normal text-zinc-950">{toArabicDigits(item.productName)}</p>
+                            <p className="font-normal text-zinc-950">{toArabicDigits(item.productName)} <span className="text-xs text-zinc-500">({getSaleUnit(item) === "carton" ? "كرتونة" : "قطعة"})</span></p>
                             <p className="mt-1 text-xs font-normal text-zinc-500">{item.barcode}</p>
                           </td>
                           <td className="px-4 py-3 font-semibold">

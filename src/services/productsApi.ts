@@ -125,6 +125,10 @@ export const mapProduct = (dto: unknown): Product => {
     throw new Error("invalid product dto");
   }
 
+  const piecesPerCarton = parseApiNumber(dto.piecesPerCarton ?? dto.pieces_per_carton);
+  const cartonPurchasePrice = parseApiMoney(dto.cartonPurchasePrice ?? dto.carton_purchase_price);
+  const cartonSalePrice = parseApiMoney(dto.cartonSalePrice ?? dto.carton_sale_price);
+
   return {
     id: String(dto.id ?? ""),
     name: String(dto.name ?? ""),
@@ -134,6 +138,9 @@ export const mapProduct = (dto: unknown): Product => {
     stock: getApiNumber(dto, ["stock"]),
     minStock: getApiNumber(dto, ["minStock"], 5),
     isActive: dto.isActive !== false,
+    ...(piecesPerCarton === null ? {} : { piecesPerCarton }),
+    ...(cartonPurchasePrice === null ? {} : { cartonPurchasePrice }),
+    ...(cartonSalePrice === null ? {} : { cartonSalePrice }),
   };
 };
 
@@ -247,6 +254,15 @@ const assertBarcodeAvailable = async (barcode: string, currentProductId?: string
 export const createProduct = async (input: ProductInput): Promise<Product> => {
   await assertBarcodeAvailable(input.barcode);
 
+  const cartonPayload = input.piecesPerCarton === undefined
+    ? {}
+    : {
+        piecesPerCarton: requireFiniteNumber(input.piecesPerCarton, "piecesPerCarton"),
+        cartonCount: requireFiniteNumber(input.cartonCount ?? Number.NaN, "cartonCount"),
+        cartonPurchasePrice: requireFiniteNumber(input.cartonPurchasePrice ?? Number.NaN, "cartonPurchasePrice"),
+        cartonSalePrice: requireFiniteNumber(input.cartonSalePrice ?? Number.NaN, "cartonSalePrice"),
+      };
+
   const payload = await postJson("/api/products", {
     name: input.name.trim(),
     barcode: input.barcode.trim(),
@@ -254,6 +270,7 @@ export const createProduct = async (input: ProductInput): Promise<Product> => {
     wholesalePrice: requireFiniteNumber(input.wholesalePrice, "wholesalePrice"),
     stock: requireFiniteNumber(input.stock, "stock"),
     minStock: requireFiniteNumber(input.minStock, "minStock"),
+    ...cartonPayload,
   });
 
   return assertWholesalePriceSaved(productFromResponse(payload), input.wholesalePrice);
@@ -264,17 +281,18 @@ export const updateProduct = async (id: string, input: Partial<ProductInput> & {
     await assertBarcodeAvailable(input.barcode, id);
   }
 
+  const { cartonCount: _cartonCount, ...updateInput } = input;
   const payload = await patchJson(`/api/products/${encodeURIComponent(id)}`, {
-    ...input,
-    name: input.name?.trim(),
-    barcode: input.barcode?.trim(),
-    price: input.price === undefined ? undefined : requireFiniteNumber(input.price, "price"),
+    ...updateInput,
+    name: updateInput.name?.trim(),
+    barcode: updateInput.barcode?.trim(),
+    price: updateInput.price === undefined ? undefined : requireFiniteNumber(updateInput.price, "price"),
     wholesalePrice:
-      input.wholesalePrice === undefined
+      updateInput.wholesalePrice === undefined
         ? undefined
-        : requireFiniteNumber(input.wholesalePrice, "wholesalePrice"),
-    stock: input.stock === undefined ? undefined : requireFiniteNumber(input.stock, "stock"),
-    minStock: input.minStock === undefined ? undefined : requireFiniteNumber(input.minStock, "minStock"),
+        : requireFiniteNumber(updateInput.wholesalePrice, "wholesalePrice"),
+    stock: updateInput.stock === undefined ? undefined : requireFiniteNumber(updateInput.stock, "stock"),
+    minStock: updateInput.minStock === undefined ? undefined : requireFiniteNumber(updateInput.minStock, "minStock"),
   });
 
   return assertWholesalePriceSaved(productFromResponse(payload), input.wholesalePrice);

@@ -1,6 +1,7 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
 import type { Invoice, InvoiceItem, InvoiceUpdateRequest, PaymentMethod, SaleRequest } from "../types";
 import { toMoneyNumber } from "../utils/money";
+import { getSaleUnit } from "../utils/carton";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
@@ -54,6 +55,8 @@ const mapInvoiceItem = (dto: unknown): InvoiceItem => {
       product?.price,
   );
   const quantity = parseNum(dto.quantity ?? dto.qty, 1);
+  const saleUnit = String(dto.saleUnit ?? dto.sale_unit).toLowerCase() === "carton" ? "carton" : "unit";
+  const stockQuantity = parseNum(dto.stockQuantity ?? dto.stock_quantity, quantity);
   const total = parseMoney(dto.total ?? dto.lineTotal ?? dto.line_total ?? dto.subtotal ?? dto.amount, price * quantity);
   const wholesalePrice = firstMoney(
     dto.unitCost ?? dto.unit_cost,
@@ -71,6 +74,8 @@ const mapInvoiceItem = (dto: unknown): InvoiceItem => {
     wholesalePrice,
     quantity,
     total,
+    saleUnit,
+    stockQuantity,
   };
 };
 
@@ -264,6 +269,7 @@ export const createInvoice = async (
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
+      saleUnit: getSaleUnit(item),
     })),
   };
 
@@ -283,6 +289,7 @@ export const updateInvoice = async (
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
+      saleUnit: getSaleUnit(item),
     })),
   };
 

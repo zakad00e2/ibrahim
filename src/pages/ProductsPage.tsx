@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Camera, ChevronLeft, ChevronRight, PackagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { Button } from "../components/Button";
@@ -8,6 +9,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { toUserFacingMessage } from "../services/apiClient";
 import { useAppStore } from "../store/AppStore";
 import type { Product } from "../types";
+import { deriveCartonValues } from "../utils/carton";
 import { getStockStatus } from "../utils/calculations";
 import { formatCurrency, formatNumber, normalizeDigits, parseLocalizedNumber, toArabicDigits } from "../utils/formatCurrency";
 
@@ -18,6 +20,11 @@ type ProductForm = {
   wholesalePrice: string;
   stock: string;
   minStock: string;
+  cartonEnabled: boolean;
+  piecesPerCarton: string;
+  cartonCount: string;
+  cartonPurchasePrice: string;
+  cartonSalePrice: string;
 };
 
 const emptyForm: ProductForm = {
@@ -27,6 +34,11 @@ const emptyForm: ProductForm = {
   wholesalePrice: "",
   stock: "0",
   minStock: "5",
+  cartonEnabled: false,
+  piecesPerCarton: "",
+  cartonCount: "",
+  cartonPurchasePrice: "",
+  cartonSalePrice: "",
 };
 
 const LIMIT = 20;
@@ -59,6 +71,13 @@ export function ProductsPage() {
 
   const totalPages = Math.max(1, Math.ceil(productsTotal / LIMIT));
   const currentPage = productsQuery.page;
+  const cartonWholesalePreview = useMemo(() => {
+    if (!form.cartonEnabled || editingProduct) return null;
+    const piecesPerCarton = parseLocalizedNumber(form.piecesPerCarton);
+    const cartonPurchasePrice = parseLocalizedNumber(form.cartonPurchasePrice);
+    if (piecesPerCarton === null || cartonPurchasePrice === null || !Number.isInteger(piecesPerCarton) || piecesPerCarton <= 0 || cartonPurchasePrice < 0) return null;
+    return deriveCartonValues({ cartonCount: 1, piecesPerCarton, cartonPurchasePrice }).wholesalePrice;
+  }, [editingProduct, form.cartonEnabled, form.cartonPurchasePrice, form.piecesPerCarton]);
 
   const handleSearchChange = useCallback(
     (raw: string) => {
@@ -103,6 +122,11 @@ export function ProductsPage() {
       wholesalePrice: String(product.wholesalePrice),
       stock: String(product.stock),
       minStock: String(product.minStock),
+      cartonEnabled: product.piecesPerCarton !== undefined,
+      piecesPerCarton: String(product.piecesPerCarton ?? ""),
+      cartonCount: "",
+      cartonPurchasePrice: String(product.cartonPurchasePrice ?? ""),
+      cartonSalePrice: String(product.cartonSalePrice ?? ""),
     });
     setMessage(null);
     setModalOpen(true);
@@ -122,6 +146,10 @@ export function ProductsPage() {
     const wholesalePrice = parseLocalizedNumber(form.wholesalePrice);
     const stock = parseLocalizedNumber(form.stock || "0");
     const minStock = parseLocalizedNumber(form.minStock || "5");
+    const cartonCount = parseLocalizedNumber(form.cartonCount);
+    const piecesPerCarton = parseLocalizedNumber(form.piecesPerCarton);
+    const cartonPurchasePrice = parseLocalizedNumber(form.cartonPurchasePrice);
+    const cartonSalePrice = parseLocalizedNumber(form.cartonSalePrice);
 
     if (price === null || price < 0) {
       setMessage({ type: "error", text: "أدخل سعر بيع صحيح" });
@@ -143,14 +171,40 @@ export function ProductsPage() {
       return;
     }
 
+    const isCreatingCartonProduct = form.cartonEnabled && !editingProduct;
+    const cartonFieldsValid =
+      piecesPerCarton !== null && Number.isInteger(piecesPerCarton) && piecesPerCarton > 0 &&
+      cartonPurchasePrice !== null && cartonPurchasePrice >= 0 &&
+      cartonSalePrice !== null && cartonSalePrice >= 0;
+
+    if (form.cartonEnabled && !cartonFieldsValid) {
+      setMessage({ type: "error", text: "أدخل بيانات كرتونة صحيحة" });
+      return;
+    }
+
+    if (isCreatingCartonProduct && (cartonCount === null || !Number.isInteger(cartonCount) || cartonCount <= 0)) {
+      setMessage({ type: "error", text: "أدخل عدد كراتين صحيح" });
+      return;
+    }
+
+    const derived = isCreatingCartonProduct
+      ? deriveCartonValues({ cartonCount: cartonCount!, piecesPerCarton: piecesPerCarton!, cartonPurchasePrice: cartonPurchasePrice! })
+      : null;
+
     const input = {
       name: form.name.trim(),
       barcode: form.barcode.trim(),
       price,
-      wholesalePrice,
-      stock,
+      wholesalePrice: derived?.wholesalePrice ?? wholesalePrice,
+      stock: derived?.stock ?? stock,
       minStock,
       isActive: true,
+      ...(form.cartonEnabled ? {
+        piecesPerCarton: piecesPerCarton!,
+        cartonPurchasePrice: cartonPurchasePrice!,
+        cartonSalePrice: cartonSalePrice!,
+        ...(isCreatingCartonProduct ? { cartonCount: cartonCount! } : {}),
+      } : {}),
     };
 
     setSubmitting(true);
@@ -440,11 +494,44 @@ export function ProductsPage() {
               <input
                 type="text"
                 inputMode="decimal"
-                value={toArabicDigits(form.wholesalePrice)}
+                value={toArabicDigits(String(cartonWholesalePreview ?? form.wholesalePrice))}
+                readOnly={cartonWholesalePreview !== null}
                 onChange={(e) => setForm((c) => ({ ...c, wholesalePrice: normalizeDigits(e.target.value) }))}
-                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100"
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-normal outline-none focus:border-brand-600 focus:bg-white focus:ring-4 focus:ring-brand-100 read-only:bg-brand-50"
               />
             </label>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <label className="flex items-center justify-between gap-3 text-sm font-normal text-zinc-900">
+              <span>بيانات الكرتونة</span>
+              <input
+                type="checkbox"
+                checked={form.cartonEnabled}
+                onChange={(e) => setForm((c) => ({ ...c, cartonEnabled: e.target.checked }))}
+              />
+            </label>
+            {form.cartonEnabled ? (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-normal text-zinc-900">عدد القطع في الكرتونة</span>
+                  <input type="text" inputMode="numeric" value={toArabicDigits(form.piecesPerCarton)} onChange={(e) => setForm((c) => ({ ...c, piecesPerCarton: normalizeDigits(e.target.value) }))} className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100" />
+                </label>
+                {!editingProduct ? <label className="block">
+                  <span className="mb-2 block text-sm font-normal text-zinc-900">عدد الكراتين</span>
+                  <input type="text" inputMode="numeric" value={toArabicDigits(form.cartonCount)} onChange={(e) => setForm((c) => ({ ...c, cartonCount: normalizeDigits(e.target.value) }))} className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100" />
+                </label> : null}
+                <label className="block">
+                  <span className="mb-2 block text-sm font-normal text-zinc-900">سعر شراء الكرتونة</span>
+                  <input type="text" inputMode="decimal" value={toArabicDigits(form.cartonPurchasePrice)} onChange={(e) => setForm((c) => ({ ...c, cartonPurchasePrice: normalizeDigits(e.target.value) }))} className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100" />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-normal text-zinc-900">سعر بيع الكرتونة</span>
+                  <input type="text" inputMode="decimal" value={toArabicDigits(form.cartonSalePrice)} onChange={(e) => setForm((c) => ({ ...c, cartonSalePrice: normalizeDigits(e.target.value) }))} className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-brand-600 focus:ring-4 focus:ring-brand-100" />
+                </label>
+                {cartonWholesalePreview !== null ? <p className="sm:col-span-2 rounded-md bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700">سعر جملة القطعة المحسوب: {formatCurrency(cartonWholesalePreview)}</p> : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
