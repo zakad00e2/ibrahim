@@ -143,7 +143,7 @@ describe("productsApi barcode uniqueness", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ message: "Not found" }, 404))
-      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "carton", wholesalePrice: 15 })));
+      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "carton", stock: 36, wholesalePrice: 15 })));
     vi.stubGlobal("fetch", fetchMock);
 
     await createProduct(makeProductInput({
@@ -162,5 +162,31 @@ describe("productsApi barcode uniqueness", () => {
       cartonPurchasePrice: 180,
       cartonSalePrice: 240,
     });
+  });
+
+  it("restores manually entered stock when a carton creation response recalculates it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ message: "Not found" }, 404))
+      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "carton", stock: 96, wholesalePrice: 0.83 })))
+      .mockResolvedValueOnce(jsonResponse(makeProduct({ id: "carton", stock: 100, wholesalePrice: 0.83 })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProduct(makeProductInput({
+      stock: 100,
+      wholesalePrice: 0.83,
+      piecesPerCarton: 24,
+      cartonCount: 4,
+      cartonPurchasePrice: 20,
+      cartonSalePrice: 30,
+    }))).resolves.toMatchObject({ stock: 100, wholesalePrice: 0.83 });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/products/carton",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    const patchOptions = fetchMock.mock.calls[2]?.[1] as RequestInit;
+    expect(JSON.parse(String(patchOptions.body))).toEqual({ stock: 100 });
   });
 });

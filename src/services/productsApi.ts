@@ -120,6 +120,34 @@ const assertWholesalePriceSaved = async (
   throw new Error("الخادم لم يحفظ سعر الجملة. تم إرسال القيمة لكن API أعادها بقيمة مختلفة.");
 };
 
+const assertStockSaved = async (
+  product: Product,
+  expectedStock: number | undefined,
+): Promise<Product> => {
+  if (expectedStock === undefined || product.stock === expectedStock) {
+    return product;
+  }
+
+  if (product.id) {
+    const retryPayload = await patchJson(`/api/products/${encodeURIComponent(product.id)}`, {
+      stock: expectedStock,
+    });
+    const retryProduct = productFromResponse(retryPayload);
+
+    if (retryProduct.stock === expectedStock) {
+      return retryProduct;
+    }
+
+    const freshProduct = await getProductById(product.id);
+
+    if (freshProduct.stock === expectedStock) {
+      return freshProduct;
+    }
+  }
+
+  throw new Error("لم يحفظ الخادم كمية المخزون اليدوية.");
+};
+
 export const mapProduct = (dto: unknown): Product => {
   if (!isRecord(dto)) {
     throw new Error("invalid product dto");
@@ -273,7 +301,12 @@ export const createProduct = async (input: ProductInput): Promise<Product> => {
     ...cartonPayload,
   });
 
-  return assertWholesalePriceSaved(productFromResponse(payload), input.wholesalePrice);
+  const productWithWholesalePrice = await assertWholesalePriceSaved(
+    productFromResponse(payload),
+    input.wholesalePrice,
+  );
+
+  return assertStockSaved(productWithWholesalePrice, input.stock);
 };
 
 export const updateProduct = async (id: string, input: Partial<ProductInput> & { isActive?: boolean }): Promise<Product> => {
