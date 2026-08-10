@@ -142,6 +142,9 @@ type AppStoreValue = {
   productsError: string | null;
   productsQuery: ProductsQuery;
   productsTotal: number;
+  cashierProducts: Product[];
+  cashierProductsLoading: boolean;
+  cashierProductsError: string | null;
   lowStockCount: number;
   customers: Customer[];
   customersLoading: boolean;
@@ -243,6 +246,9 @@ const mergeDebtMetadata = (debt: Debt, fallback?: Debt): Debt => {
   };
 };
 
+const CASHIER_PRODUCTS_PAGE_SIZE = 100;
+const CASHIER_PRODUCTS_MAX_PAGES = 500;
+
 const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
   id: `offline-debt-${invoice.id}`,
   invoiceId: invoice.id,
@@ -317,6 +323,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [productsError, setProductsError] = useState<string | null>(null);
   const [productsQuery, setProductsQueryState] = useState<ProductsQuery>(DEFAULT_PRODUCTS_QUERY);
   const [productsTotal, setProductsTotal] = useState(0);
+  const [cashierProducts, setCashierProducts] = useState<Product[]>([]);
+  const [cashierProductsLoading, setCashierProductsLoading] = useState(false);
+  const [cashierProductsError, setCashierProductsError] = useState<string | null>(null);
   const [lowStockCount, setLowStockCount] = useState(0);
 
   // ── Customers ────────────────────────────────────────────────────────────────
@@ -338,6 +347,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setProductsLoading(false);
     setProductsError(null);
     setProductsTotal(0);
+    setCashierProducts([]);
+    setCashierProductsLoading(false);
+    setCashierProductsError(null);
     setLowStockCount(0);
     setCustomers([]);
     setCustomersLoading(false);
@@ -397,6 +409,62 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [storeCacheKey]);
 
+  const fetchCashierProducts = useCallback(async () => {
+    if (!storeCacheKey) {
+      setCashierProducts([]);
+      return;
+    }
+
+    setCashierProductsLoading(true);
+    setCashierProductsError(null);
+    try {
+      const isOnline = getBrowserOnlineState();
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const cacheQuery = { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER };
+
+      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+        if (!isOnline) setIsOffline(true);
+        const cached = await listCachedProducts(storeCacheKey, cacheQuery);
+        setCashierProducts(cached.items);
+        return;
+      }
+
+      const items: Product[] = [];
+      let page = 1;
+
+      for (let fetchedPages = 0; fetchedPages < CASHIER_PRODUCTS_MAX_PAGES; fetchedPages += 1) {
+        const result = await listProducts({ isActive: true, page, limit: CASHIER_PRODUCTS_PAGE_SIZE });
+        items.push(...result.items);
+
+        const total = Number.isFinite(result.total) ? Math.max(0, result.total) : 0;
+        const limit = Number.isFinite(result.limit) && result.limit > 0 ? result.limit : CASHIER_PRODUCTS_PAGE_SIZE;
+        if (
+          result.items.length === 0
+          || (total > 0 && items.length >= total)
+          || (total === 0 && result.items.length < limit)
+        ) break;
+
+        page = Number.isFinite(result.page) && result.page >= page ? result.page + 1 : page + 1;
+      }
+
+      await upsertCachedProducts(storeCacheKey, items);
+      setCashierProducts(items);
+    } catch (err) {
+      if (isNetworkFailure(err)) {
+        setIsOffline(true);
+        const cached = await listCachedProducts(storeCacheKey, { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
+        setCashierProducts(cached.items);
+        if (cached.items.length === 0) {
+          setCashierProductsError("تعذر تحميل منتجات الكاشير.");
+        }
+      } else {
+        setCashierProductsError(toUserFacingMessage(err, "تعذر تحميل منتجات الكاشير."));
+      }
+    } finally {
+      setCashierProductsLoading(false);
+    }
+  }, [storeCacheKey]);
+
   const fetchLowStock = useCallback(async () => {
     if (!storeCacheKey) {
       setLowStockCount(0);
@@ -432,6 +500,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (!isStoreSession) return;
     void fetchProducts(productsQuery);
   }, [isStoreSession, productsQuery, fetchProducts]);
+
+  useEffect(() => {
+    if (!isStoreSession) return;
+    void fetchCashierProducts();
+  }, [isStoreSession, fetchCashierProducts]);
 
   useEffect(() => {
     if (!isStoreSession) return;
@@ -1060,15 +1133,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (compareMoney(paid, total) === 1) return { ok: false, message: "المبلغ المدفوع لا يمكن أن يتجاوز المجموع" };
 
       const unavailable = request.items.find((item) => {
-        const product = products.find((p) => p.id === item.productId);
+        const product = cashierProducts.find((p) => p.id === item.productId);
         return !product || product.stock < item.quantity;
       });
       if (unavailable) return { ok: false, message: `الكمية المتوفرة من ${unavailable.productName} غير كافية` };
 
       const clientInvoiceId = createClientOperationId("offline-invoice");
       const persistOfflineSale = async (): Promise<ActionResult> => {
-        const invoice = buildOfflineInvoice(request, products, customer, new Date(), clientInvoiceId);
-        const nextProducts = applyOfflineSaleToProducts(products, invoice.items);
+        const invoice = buildOfflineInvoice(request, cashierProducts, customer, new Date(), clientInvoiceId);
+        const nextCashierProducts = applyOfflineSaleToProducts(cashierProducts, invoice.items);
+        const nextProducts = products.map((product) =>
+          nextCashierProducts.find((candidate) => candidate.id === product.id) ?? product,
+        );
         let nextCustomers = customers;
 
         await queueOfflineOperation(storeCacheKey, {
@@ -1079,7 +1155,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ownerSessionKey: queueOwnerKey,
         });
         await upsertCachedInvoices(storeCacheKey, [invoice]);
-        await upsertCachedProducts(storeCacheKey, nextProducts);
+        await upsertCachedProducts(storeCacheKey, nextCashierProducts);
 
         if (invoice.remaining > 0 && customer) {
           const offlineDebt = createOfflineDebtFromInvoice(invoice);
@@ -1098,6 +1174,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setInvoices((current) => [invoice, ...current]);
         setInvoicesTotal((current) => current + 1);
         setProducts(nextProducts);
+        setCashierProducts(nextCashierProducts);
         if (invoice.remaining > 0 && customer) setCustomers(nextCustomers);
 
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: invoice.id };
@@ -1122,7 +1199,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       // Enrich items with wholesalePrice from local products (server may not return it)
       const enrichedItems: InvoiceItem[] = request.items.map((item) => {
-        const product = products.find((p) => p.id === item.productId);
+        const product = cashierProducts.find((p) => p.id === item.productId);
         const wholesalePrice =
           Number.isFinite(item.wholesalePrice) && item.wholesalePrice > 0
             ? item.wholesalePrice
@@ -1140,13 +1217,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         customerName: serverInvoice.customerName ?? customer?.name ?? "بيع مباشر",
         items: serverInvoice.items.length > 0 ? serverInvoice.items : enrichedItems,
       };
-      const nextProducts = applyOfflineSaleToProducts(products, invoice.items);
+      const nextCashierProducts = applyOfflineSaleToProducts(cashierProducts, invoice.items);
+      const nextProducts = products.map((product) =>
+        nextCashierProducts.find((candidate) => candidate.id === product.id) ?? product,
+      );
 
       setInvoices((current) => [invoice, ...current]);
       setInvoicesTotal((current) => current + 1);
       setProducts(nextProducts);
+      setCashierProducts(nextCashierProducts);
       await upsertCachedInvoices(storeCacheKey, [invoice]);
-      await upsertCachedProducts(storeCacheKey, nextProducts);
+      await upsertCachedProducts(storeCacheKey, nextCashierProducts);
 
       const remaining = maxMoney(subtractMoney(total, paid), 0);
       if (remaining > 0 && customer) {
@@ -1154,10 +1235,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
 
       void refreshProducts();
+      void fetchCashierProducts();
       void refreshInvoices();
       return { ok: true, message: "تم إتمام البيع بنجاح" };
     },
-    [customers, products, queueOwnerKey, refreshProducts, refreshCustomers, refreshInvoices, storeCacheKey],
+    [cashierProducts, customers, fetchCashierProducts, products, queueOwnerKey, refreshProducts, refreshCustomers, refreshInvoices, storeCacheKey],
   );
 
   // ── Invoice mutations ────────────────────────────────────────────────────────
@@ -1390,6 +1472,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       productsError,
       productsQuery,
       productsTotal,
+      cashierProducts,
+      cashierProductsLoading,
+      cashierProductsError,
       lowStockCount,
       customers,
       customersLoading,
@@ -1433,6 +1518,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       productsError,
       productsQuery,
       productsTotal,
+      cashierProducts,
+      cashierProductsLoading,
+      cashierProductsError,
       lowStockCount,
       customers,
       customersLoading,

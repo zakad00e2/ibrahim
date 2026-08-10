@@ -283,7 +283,7 @@ describe("AppStore product actions", () => {
       expect(mounted.getStore().products).toEqual([existingProduct]);
       expect(mounted.getStore().productsTotal).toBe(1);
     });
-    expect(productApiMocks.listProducts).toHaveBeenCalledTimes(1);
+    expect(productApiMocks.listProducts).toHaveBeenCalledTimes(2);
 
     let result: Awaited<ReturnType<StoreSnapshot["addProduct"]>> | undefined;
     await act(async () => {
@@ -291,10 +291,86 @@ describe("AppStore product actions", () => {
     });
 
     expect(result).toMatchObject({ ok: true, id: createdProduct.id });
-    expect(productApiMocks.listProducts).toHaveBeenCalledTimes(1);
+    expect(productApiMocks.listProducts).toHaveBeenCalledTimes(2);
     expect(mounted.getStore().products).toEqual([createdProduct, existingProduct]);
     expect(mounted.getStore().productsTotal).toBe(2);
     expect(mounted.getStore().productsLoading).toBe(false);
+  });
+
+  it("loads every active product page for the cashier", async () => {
+    const laterProduct = { ...existingProduct, id: "product-101", name: "Later product", barcode: "101" };
+
+    productApiMocks.listProducts.mockImplementation(async ({ page, limit }: { page?: number; limit?: number }) => {
+      if (limit === 100 && page === 1) {
+        return { items: [existingProduct], total: 2, page: 1, limit: 100 };
+      }
+
+      if (limit === 100 && page === 2) {
+        return { items: [laterProduct], total: 2, page: 2, limit: 100 };
+      }
+
+      return { items: [existingProduct], total: 1, page: 1, limit: 20 };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProductsLoading).toBe(false);
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct, laterProduct]);
+      expect(mounted.getStore().cashierProductsError).toBeNull();
+    });
+
+    expect(productApiMocks.listProducts).toHaveBeenCalledWith({ isActive: true, page: 1, limit: 100 });
+    expect(productApiMocks.listProducts).toHaveBeenCalledWith({ isActive: true, page: 2, limit: 100 });
+    expect(offlineDbMocks.upsertCachedProducts).toHaveBeenCalledWith("store:store-1", [existingProduct, laterProduct]);
+  });
+
+  it("completes a sale for a product loaded after the management page", async () => {
+    const laterProduct = { ...existingProduct, id: "product-101", name: "Later product", barcode: "101" };
+    const laterItem = {
+      productId: laterProduct.id,
+      productName: laterProduct.name,
+      barcode: laterProduct.barcode,
+      price: laterProduct.price,
+      wholesalePrice: laterProduct.wholesalePrice,
+      quantity: 1,
+      total: laterProduct.price,
+    };
+    const laterSale = { ...queuedSaleRequest, items: [laterItem] };
+
+    productApiMocks.listProducts.mockImplementation(async ({ page, limit }: { page?: number; limit?: number }) => {
+      if (limit === 100 && page === 1) {
+        return { items: [existingProduct], total: 2, page: 1, limit: 100 };
+      }
+
+      if (limit === 100 && page === 2) {
+        return { items: [laterProduct], total: 2, page: 2, limit: 100 };
+      }
+
+      return { items: [existingProduct], total: 1, page: 1, limit: 20 };
+    });
+    offlineSyncMocks.buildOfflineInvoice.mockReturnValue({ ...syncedInvoice, items: [laterItem] });
+    offlineSyncMocks.applyOfflineSaleToProducts.mockReturnValue([{ ...laterProduct, stock: laterProduct.stock - 1 }]);
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct, laterProduct]);
+    });
+    offlineSyncMocks.getBrowserOnlineState.mockReturnValue(false);
+
+    let result: Awaited<ReturnType<StoreSnapshot["completeSale"]>> | undefined;
+    await act(async () => {
+      result = await mounted.getStore().completeSale(laterSale);
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(offlineSyncMocks.applyOfflineSaleToProducts).toHaveBeenCalledWith(
+      [existingProduct, laterProduct],
+      [laterItem],
+    );
   });
 
   it("passes queued offline invoice local id as clientInvoiceId when syncing", async () => {
