@@ -61,7 +61,9 @@ const resolveSetState = <T,>(value: SetStateAction<T>, current: T): T =>
 
 export function CashierPage() {
   const {
-    products,
+    cashierProducts,
+    cashierProductsLoading,
+    cashierProductsError,
     customers,
     addCustomer,
     completeSale,
@@ -179,13 +181,13 @@ export function CashierPage() {
     const term = normalizeDigits(search).trim().toLowerCase();
 
     if (!term) {
-      return products;
+      return cashierProducts;
     }
 
-    return products.filter(
+    return cashierProducts.filter(
       (product) => product.name.toLowerCase().includes(term) || product.barcode.includes(term),
     );
-  }, [products, search]);
+  }, [cashierProducts, search]);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId),
@@ -283,7 +285,7 @@ export function CashierPage() {
 
       if (!normalized) return;
 
-      const localProduct = findProductByBarcode(products, normalized);
+      const localProduct = findProductByBarcode(cashierProducts, normalized);
 
       if (localProduct) {
         addProductToInvoice(localProduct);
@@ -301,7 +303,7 @@ export function CashierPage() {
       })();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [products, findProductByBarcodeRemote],
+    [cashierProducts, findProductByBarcodeRemote],
   );
 
   const handleBarcodeEnter = useCallback(
@@ -327,7 +329,7 @@ export function CashierPage() {
   );
 
   const updateItemQuantity = (productId: string, delta: number) => {
-    const product = products.find((item) => item.id === productId);
+    const product = cashierProducts.find((item) => item.id === productId);
 
     if (!product) {
       return;
@@ -351,7 +353,7 @@ export function CashierPage() {
   };
 
   const setItemQuantity = (productId: string, quantityValue: string) => {
-    const product = products.find((item) => item.id === productId);
+    const product = cashierProducts.find((item) => item.id === productId);
 
     if (!product) {
       return;
@@ -568,7 +570,12 @@ export function CashierPage() {
             aria-label="قائمة منتجات قابلة للتمرير العمودي"
             className="grid max-h-[34rem] gap-3 overflow-y-auto overscroll-y-contain p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-2 2xl:grid-cols-3"
           >
-            {filteredProducts.map((product) => {
+            {cashierProductsLoading ? <p className="p-4 text-sm text-zinc-500">جار تحميل المنتجات...</p> : null}
+            {cashierProductsError ? <p className="p-4 text-sm text-red-700">{cashierProductsError}</p> : null}
+            {!cashierProductsLoading && !cashierProductsError && filteredProducts.length === 0 ? (
+              <p className="p-4 text-sm text-zinc-500">لا توجد منتجات مطابقة للبحث.</p>
+            ) : null}
+            {!cashierProductsLoading && !cashierProductsError ? filteredProducts.map((product) => {
               const status = getStockStatus(product.stock);
 
               return (
@@ -594,7 +601,7 @@ export function CashierPage() {
                   </div>
                 </button>
               );
-            })}
+            }) : null}
           </div>
         </div>
 

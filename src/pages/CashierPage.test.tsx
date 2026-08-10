@@ -50,6 +50,19 @@ const storeHarness = vi.hoisted(() => {
       isActive: true,
     },
   ];
+  const cashierProducts = [
+    ...products,
+    {
+      id: "product-21",
+      name: "Later Coffee",
+      barcode: "9876543210",
+      price: 30,
+      wholesalePrice: 20,
+      stock: 4,
+      minStock: 1,
+      isActive: true,
+    },
+  ];
 
   let cashierDraft = emptyDraft();
   const completeSale = vi.fn(async () => ({ ok: true, message: "ok", id: "invoice-1" }));
@@ -62,6 +75,7 @@ const storeHarness = vi.hoisted(() => {
   return {
     product,
     products,
+    cashierProducts,
     getCashierDraft: () => cashierDraft,
     resetCashierDraft: () => {
       cashierDraft = emptyDraft();
@@ -97,6 +111,9 @@ vi.mock("../store/AppStore", async () => {
 
       return {
         products: storeHarness.products,
+        cashierProducts: storeHarness.cashierProducts,
+        cashierProductsLoading: false,
+        cashierProductsError: null,
         customers: [],
         cashierDraft: storeHarness.getCashierDraft(),
         setCashierDraft: storeHarness.setCashierDraft,
@@ -285,7 +302,29 @@ describe("CashierPage invoice draft", () => {
     expect(productScroller.className).not.toContain("grid-flow-col");
 
     const productButtons = Array.from(productScroller.querySelectorAll("button"));
-    expect(productButtons).toHaveLength(storeHarness.products.length);
+    expect(productButtons).toHaveLength(storeHarness.cashierProducts.length);
+  });
+
+  it("shows and searches products beyond the management page", async () => {
+    const view = await renderCashier();
+
+    expect(view.container.textContent).toContain("Later Coffee");
+
+    const searchInput = view.container.querySelector('input[placeholder*="بحث"]');
+
+    if (!(searchInput instanceof HTMLInputElement)) {
+      throw new Error("Search input was not rendered");
+    }
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(searchInput, "9876543210");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const productScroller = view.container.querySelector('[aria-label="قائمة منتجات قابلة للتمرير العمودي"]');
+
+    expect(productScroller?.textContent).toContain("Later Coffee");
+    expect(productScroller?.textContent).not.toContain("Test Rice");
   });
 
   it("keeps current invoice items in a scroll area so the summary can stay visible", async () => {
