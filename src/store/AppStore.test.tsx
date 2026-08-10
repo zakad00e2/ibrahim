@@ -639,4 +639,129 @@ describe("AppStore product actions", () => {
       remaining: 25,
     });
   });
+
+  it("loads the final customer page first and reverses its newest-first rows", async () => {
+    const newestCustomer: Customer = {
+      id: "customer-newest",
+      name: "Newest",
+      phone: "011",
+      debts: [],
+      debtBalance: 0,
+    };
+    const middleCustomer: Customer = {
+      id: "customer-middle",
+      name: "Middle",
+      phone: "012",
+      debts: [],
+      debtBalance: 0,
+    };
+    const oldestCustomer: Customer = {
+      id: "customer-oldest",
+      name: "Oldest",
+      phone: "013",
+      debts: [],
+      debtBalance: 0,
+    };
+    customerApiMocks.listCustomers.mockImplementation(async ({ page }: { page?: number }) => {
+      if (page === 2) {
+        return { items: [middleCustomer, oldestCustomer], total: 22, page: 2, limit: 20 };
+      }
+      return { items: [newestCustomer], total: 22, page: 1, limit: 20 };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
+    });
+    expect(customerApiMocks.listCustomers).toHaveBeenCalledWith({ page: 2, limit: 20 });
+  });
+
+  it("mirrors and reverses cached customer pages while offline", async () => {
+    const newestCustomer: Customer = {
+      id: "cached-newest",
+      name: "Newest",
+      phone: "011",
+      debts: [],
+      debtBalance: 0,
+    };
+    const middleCustomer: Customer = {
+      id: "cached-middle",
+      name: "Middle",
+      phone: "012",
+      debts: [],
+      debtBalance: 0,
+    };
+    const oldestCustomer: Customer = {
+      id: "cached-oldest",
+      name: "Oldest",
+      phone: "013",
+      debts: [],
+      debtBalance: 0,
+    };
+    offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
+    offlineDbMocks.listCachedCustomers.mockImplementation(async (_storeKey: string, query: { page?: number }) => {
+      if (query.page === 2) {
+        return { items: [middleCustomer, oldestCustomer], total: 22, page: 2, limit: 20 };
+      }
+      return { items: [newestCustomer], total: 22, page: 1, limit: 20 };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
+    });
+    expect(offlineDbMocks.listCachedCustomers).toHaveBeenCalledWith("store:store-1", {
+      search: "",
+      page: 2,
+      limit: 20,
+    });
+  });
+
+  it("does not prepend a newly created customer to the oldest-first first page", async () => {
+    const newestCustomer: Customer = {
+      id: "creation-newest",
+      name: "Newest",
+      phone: "011",
+      debts: [],
+      debtBalance: 0,
+    };
+    const middleCustomer: Customer = {
+      id: "creation-middle",
+      name: "Middle",
+      phone: "012",
+      debts: [],
+      debtBalance: 0,
+    };
+    const oldestCustomer: Customer = {
+      id: "creation-oldest",
+      name: "Oldest",
+      phone: "013",
+      debts: [],
+      debtBalance: 0,
+    };
+    customerApiMocks.createCustomer.mockResolvedValue(syncedCustomer);
+    customerApiMocks.listCustomers.mockImplementation(async ({ page }: { page?: number }) => {
+      if (page === 2) {
+        return { items: [middleCustomer, oldestCustomer], total: 22, page: 2, limit: 20 };
+      }
+      return { items: [newestCustomer], total: 22, page: 1, limit: 20 };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
+    });
+    await act(async () => {
+      await mounted.getStore().addCustomer(queuedCustomerInput);
+    });
+
+    expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
+    expect(mounted.getStore().customers).not.toContainEqual(syncedCustomer);
+  });
 });

@@ -201,6 +201,20 @@ const DEFAULT_INVOICES_QUERY: InvoicesQuery = {
   limit: 20,
 };
 
+const getMirroredCustomerPage = (page: number, total: number, limit: number) => {
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  return Math.max(1, Math.min(totalPages, totalPages - page + 1));
+};
+
+const listMirroredCachedCustomers = async (storeKey: string, query: CustomersQuery) => {
+  const firstCached = await listCachedCustomers(storeKey, { ...query, page: 1 });
+  const cachePage = getMirroredCustomerPage(query.page, firstCached.total, query.limit);
+  const cached = cachePage === 1
+    ? firstCached
+    : await listCachedCustomers(storeKey, { ...query, page: cachePage });
+  return { ...cached, items: [...cached.items].reverse(), total: firstCached.total };
+};
+
 export const createEmptyCashierDraft = (): CashierDraft => ({
   items: [],
   paymentMethod: "cash",
@@ -563,7 +577,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
-        const cached = await listCachedCustomers(storeCacheKey, query);
+        const cached = await listMirroredCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         return;
@@ -574,15 +588,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         limit: query.limit,
       };
       if (query.search.trim()) params.search = query.search.trim();
-      const result: CustomersListResult = await listCustomers(params);
+      const firstResult: CustomersListResult = await listCustomers({ ...params, page: 1 });
+      const backendPage = getMirroredCustomerPage(query.page, firstResult.total, query.limit);
+      const result: CustomersListResult = backendPage === 1
+        ? firstResult
+        : await listCustomers({ ...params, page: backendPage });
       const items = await hydrateCustomerDebtSummaries(result.items);
       await upsertCachedCustomers(storeCacheKey, items);
-      setCustomers(items);
-      setCustomersTotal(result.total);
+      setCustomers([...items].reverse());
+      setCustomersTotal(firstResult.total);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        const cached = await listCachedCustomers(storeCacheKey, query);
+        const cached = await listMirroredCachedCustomers(storeCacheKey, query);
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         setCustomersError(null);
@@ -816,25 +834,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [storeCacheKey]);
 
   // ── Merge a saved customer into the current page list ────────────────────────
-  const mergeCustomerIntoCurrentPage = useCallback((saved: Customer) => {
-    setCustomers((current) => {
-      const exists = current.some((c) => c.id === saved.id);
-      if (exists) {
-        return current.map((c) =>
-          c.id === saved.id
-            ? {
-                ...c,
-                ...saved,
-                debts: saved.debts.length > 0 ? saved.debts : c.debts,
-                debtBalance: saved.debtBalance ?? c.debtBalance,
-              }
-            : c,
-        );
-      }
-      return [saved, ...current].slice(0, customersQueryRef.current.limit);
-    });
-  }, []);
-
   // ── Customer CRUD ────────────────────────────────────────────────────────────
   const addCustomer = useCallback(
     async (input: CustomerInput): Promise<ActionResult> => {
@@ -844,14 +843,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       const persistOfflineCustomer = async (): Promise<ActionResult> => {
         const draft = buildOfflineCustomer(input);
-        const { customer: saved, created } = await queueCachedOfflineCustomerCreation(
+        const { customer: saved } = await queueCachedOfflineCustomerCreation(
           storeCacheKey,
           input,
           draft,
           queueOwnerKey,
         );
-        mergeCustomerIntoCurrentPage(saved);
-        if (created) setCustomersTotal((current) => current + 1);
+        await fetchCustomers(customersQueryRef.current);
         return { ok: true, message: OFFLINE_WRITE_MESSAGE, id: saved.id };
       };
 
@@ -864,7 +862,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const saved = await apiCreateCustomer(input);
         await upsertCachedCustomers(storeCacheKey, [saved]);
         await fetchCustomers(customersQueryRef.current);
-        mergeCustomerIntoCurrentPage(saved);
         return { ok: true, message: "تمت إضافة العميل بنجاح", id: saved.id };
       } catch (err) {
         if (isNetworkFailure(err)) {
@@ -874,7 +871,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: toUserFacingMessage(err, "تعذر إضافة العميل.") };
       }
     },
-    [fetchCustomers, mergeCustomerIntoCurrentPage, queueOwnerKey, storeCacheKey],
+    [fetchCustomers, queueOwnerKey, storeCacheKey],
   );
 
   const updateCustomer = useCallback(
