@@ -215,4 +215,77 @@ describe("ProductsPage carton entry", () => {
       stock: 100,
     }));
   });
+
+  it("derives wholesale price when carton data is enabled while editing a legacy product", async () => {
+    mounted = await renderProductsPage();
+    await act(async () => findButtonByText(mounted!.container, "تعديل").click());
+
+    const checkbox = document.querySelector('input[type="checkbox"]');
+    if (!(checkbox instanceof HTMLInputElement)) throw new Error("Carton toggle was not rendered");
+    await act(async () => checkbox.click());
+
+    const setInput = (label: string, value: string) => {
+      const input = Array.from(document.querySelectorAll("input")).find((candidate) =>
+        candidate.parentElement?.textContent?.includes(label),
+      );
+      if (!(input instanceof HTMLInputElement)) throw new Error(`Missing ${label}`);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    await act(async () => {
+      setInput("عدد القطع في الكرتونة", "12");
+      setInput("سعر شراء الكرتونة", "180");
+      setInput("سعر بيع الكرتونة", "240");
+    });
+    await act(async () => {
+      findButtonByText(document.body, "حفظ التعديل").click();
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.updateProduct).toHaveBeenCalledWith("product-1", expect.objectContaining({
+      piecesPerCarton: 12,
+      cartonPurchasePrice: 180,
+      cartonSalePrice: 240,
+      wholesalePrice: 15,
+      stock: 4,
+    }));
+  });
+
+  it("recalculates wholesale price after carton purchase price changes during editing", async () => {
+    const legacyProduct = storeMocks.product;
+    storeMocks.product = {
+      ...legacyProduct,
+      piecesPerCarton: 12,
+      cartonPurchasePrice: 180,
+      cartonSalePrice: 240,
+    };
+
+    mounted = await renderProductsPage();
+    await act(async () => findButtonByText(mounted!.container, "تعديل").click());
+
+    const purchaseInput = Array.from(document.querySelectorAll("input")).find((candidate) =>
+      candidate.parentElement?.textContent?.includes("سعر شراء الكرتونة"),
+    );
+    if (!(purchaseInput instanceof HTMLInputElement)) throw new Error("Carton purchase input was not rendered");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(purchaseInput, "300");
+      purchaseInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("سعر جملة القطعة المحسوب");
+
+    await act(async () => {
+      findButtonByText(document.body, "حفظ التعديل").click();
+      await Promise.resolve();
+    });
+
+    expect(storeMocks.updateProduct).toHaveBeenCalledWith("product-1", expect.objectContaining({
+      cartonPurchasePrice: 300,
+      wholesalePrice: 25,
+      stock: 4,
+    }));
+
+    storeMocks.product = legacyProduct;
+  });
 });

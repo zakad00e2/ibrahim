@@ -72,12 +72,12 @@ export function ProductsPage() {
   const totalPages = Math.max(1, Math.ceil(productsTotal / LIMIT));
   const currentPage = productsQuery.page;
   const cartonWholesalePreview = useMemo(() => {
-    if (!form.cartonEnabled || editingProduct) return null;
+    if (!form.cartonEnabled) return null;
     const piecesPerCarton = parseLocalizedNumber(form.piecesPerCarton);
     const cartonPurchasePrice = parseLocalizedNumber(form.cartonPurchasePrice);
     if (piecesPerCarton === null || cartonPurchasePrice === null || !Number.isInteger(piecesPerCarton) || piecesPerCarton <= 0 || cartonPurchasePrice < 0) return null;
     return deriveCartonValues({ cartonCount: 1, piecesPerCarton, cartonPurchasePrice }).wholesalePrice;
-  }, [editingProduct, form.cartonEnabled, form.cartonPurchasePrice, form.piecesPerCarton]);
+  }, [form.cartonEnabled, form.cartonPurchasePrice, form.piecesPerCarton]);
 
   const handleSearchChange = useCallback(
     (raw: string) => {
@@ -182,8 +182,12 @@ export function ProductsPage() {
       return;
     }
 
-    const derived = isCreatingCartonProduct
-      ? deriveCartonValues({ cartonCount: cartonCount!, piecesPerCarton: piecesPerCarton!, cartonPurchasePrice: cartonPurchasePrice! })
+    const derived = form.cartonEnabled
+      ? deriveCartonValues({
+          cartonCount: isCreatingCartonProduct ? cartonCount! : 1,
+          piecesPerCarton: piecesPerCarton!,
+          cartonPurchasePrice: cartonPurchasePrice!,
+        })
       : null;
     const effectiveWholesalePrice = derived?.wholesalePrice ?? wholesalePrice;
 
