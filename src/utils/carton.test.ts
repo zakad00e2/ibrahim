@@ -16,6 +16,12 @@ describe("carton helpers", () => {
     ).toEqual({ stock: 36, wholesalePrice: 15 });
   });
 
+  it("rounds a repeating wholesale price to currency precision", () => {
+    expect(
+      deriveCartonValues({ cartonCount: 4, piecesPerCarton: 24, cartonPurchasePrice: 20 }),
+    ).toEqual({ stock: 96, wholesalePrice: 0.83 });
+  });
+
   it("treats a legacy invoice line as a piece sale", () => {
     expect(getInvoiceItemKey({ productId: "p1" })).toBe("p1:unit");
     expect(getInvoiceItemStockQuantity({ quantity: 4 })).toBe(4);

@@ -210,7 +210,7 @@ describe("ProductsPage carton entry", () => {
     });
 
     expect(storeMocks.addProduct).toHaveBeenCalledWith(expect.objectContaining({
-      wholesalePrice: 0.833333333333,
+      wholesalePrice: 0.83,
       stock: 96,
     }));
   });

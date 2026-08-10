@@ -1,5 +1,5 @@
+import Decimal from "decimal.js";
 import type { InvoiceItem, SaleUnit } from "../types";
-import { toMoneyNumber } from "./money";
 
 export type CartonValuesInput = {
   cartonCount: number;
@@ -13,7 +13,10 @@ export const deriveCartonValues = ({
   cartonPurchasePrice,
 }: CartonValuesInput): { stock: number; wholesalePrice: number } => ({
   stock: cartonCount * piecesPerCarton,
-  wholesalePrice: toMoneyNumber(cartonPurchasePrice / piecesPerCarton),
+  wholesalePrice: new Decimal(cartonPurchasePrice)
+    .div(piecesPerCarton)
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+    .toNumber(),
 });
 
 export const getSaleUnit = (item: Pick<InvoiceItem, "saleUnit">): SaleUnit =>
