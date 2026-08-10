@@ -296,6 +296,9 @@ export function CashierPage() {
       setNotice({ type: result.ok ? "success" : "error", text: result.message });
 
       if (result.ok) {
+        // Customer search is shared with the customers page. Clear the cashier's
+        // temporary search so navigating back always starts with the full list.
+        setCustomersQuery({ search: "", page: 1, limit: 20 });
         resetCashierDraft();
         setPrintReceipt(null);
         barcodeInputRef.current?.focus();
@@ -303,7 +306,16 @@ export function CashierPage() {
     } finally {
       setSaleSubmitting(false);
     }
-  }, [completeSale, enteredDiscount, items, paidAmount, paymentMethod, resetCashierDraft, selectedCustomerId]);
+  }, [
+    completeSale,
+    enteredDiscount,
+    items,
+    paidAmount,
+    paymentMethod,
+    resetCashierDraft,
+    selectedCustomerId,
+    setCustomersQuery,
+  ]);
 
   const addByBarcode = useCallback(
     (code: string) => {

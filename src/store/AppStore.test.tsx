@@ -320,6 +320,21 @@ describe("AppStore product actions", () => {
     expect(mounted.getStore().productsLoading).toBe(false);
   });
 
+  it("adds a newly created active product to the cashier product list", async () => {
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct]);
+    });
+
+    await act(async () => {
+      await mounted.getStore().addProduct(productInput);
+    });
+
+    expect(mounted.getStore().cashierProducts).toEqual([createdProduct, existingProduct]);
+  });
+
   it("loads every active product page for the cashier", async () => {
     const laterProduct = { ...existingProduct, id: "product-101", name: "Later product", barcode: "101" };
 

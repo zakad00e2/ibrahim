@@ -67,6 +67,7 @@ const storeHarness = vi.hoisted(() => {
 
   let cashierDraft = emptyDraft();
   const completeSale = vi.fn(async () => ({ ok: true, message: "ok", id: "invoice-1" }));
+  const setCustomersQuery = vi.fn();
   const subscribers = new Set<() => void>();
 
   const emit = () => {
@@ -83,6 +84,7 @@ const storeHarness = vi.hoisted(() => {
       emit();
     },
     completeSale,
+    setCustomersQuery,
     setCashierDraft: (nextDraft: typeof cashierDraft | ((current: typeof cashierDraft) => typeof cashierDraft)) => {
       cashierDraft = typeof nextDraft === "function" ? nextDraft(cashierDraft) : nextDraft;
       emit();
@@ -122,7 +124,7 @@ vi.mock("../store/AppStore", async () => {
         addCustomer: vi.fn(async () => ({ ok: true, message: "ok", id: "customer-1" })),
         completeSale: storeHarness.completeSale,
         findProductByBarcodeRemote: vi.fn(async () => null),
-        setCustomersQuery: vi.fn(),
+        setCustomersQuery: storeHarness.setCustomersQuery,
       };
     },
   };
@@ -279,6 +281,7 @@ describe("CashierPage invoice draft", () => {
       paidAmount: 0,
       discount: 0,
     });
+    expect(storeHarness.setCustomersQuery).toHaveBeenCalledWith({ search: "", page: 1, limit: 20 });
   });
 
   it("sends the fixed invoice discount when completing a sale", async () => {

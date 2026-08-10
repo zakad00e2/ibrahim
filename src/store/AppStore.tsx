@@ -732,6 +732,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const saved = await apiCreateProduct(input);
         await upsertCachedProducts(storeCacheKey, [saved]);
         addCreatedProductToCurrentQuery(saved);
+        if (saved.isActive) {
+          setCashierProducts((current) => {
+            const exists = current.some((product) => product.id === saved.id);
+            return exists
+              ? current.map((product) => (product.id === saved.id ? saved : product))
+              : [saved, ...current];
+          });
+        }
         void fetchLowStock();
         return { ok: true, message: "تمت إضافة المنتج بنجاح", id: saved.id };
       } catch (err) {
