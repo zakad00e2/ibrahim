@@ -151,6 +151,6 @@ describe("invoicesApi", () => {
     vi.stubGlobal("fetch", fetchMock);
     await createInvoice({ items: [{ productId: "p1", productName: "Tea", barcode: "1", price: 240, wholesalePrice: 180, quantity: 1, total: 240, saleUnit: "carton", stockQuantity: 12 }], paymentMethod: "cash" });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toMatchObject({ items: [{ productId: "p1", quantity: 1, saleUnit: "carton" }] });
+    expect(JSON.parse(String(init.body))).toMatchObject({ items: [{ productId: "p1", quantity: 1, saleUnit: "CARTON" }] });
   });
 });

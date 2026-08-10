@@ -274,7 +274,7 @@ export const createInvoice = async (
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
-      saleUnit: getSaleUnit(item),
+      saleUnit: getSaleUnit(item).toUpperCase(),
     })),
   };
 
@@ -294,7 +294,7 @@ export const updateInvoice = async (
     items: request.items.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
-      saleUnit: getSaleUnit(item),
+      saleUnit: getSaleUnit(item).toUpperCase(),
     })),
   };
 
