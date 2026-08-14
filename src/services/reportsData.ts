@@ -1,7 +1,5 @@
-import type { Customer, DebtSummary, Invoice, Product } from "../types";
-import { getCustomerDebts } from "./debtsApi";
+import type { Invoice, Product } from "../types";
 import { getInvoiceById, listInvoices, type InvoicesListResult } from "./invoicesApi";
-import { listCustomers, type CustomersListResult } from "./customersApi";
 import { listProducts, type ProductsListResult } from "./productsApi";
 
 export const REPORTS_PAGE_SIZE = 100;
@@ -11,7 +9,6 @@ const REPORTS_MAX_ITEMS = REPORTS_PAGE_SIZE * REPORTS_MAX_PAGES;
 
 export type ReportsDataset = {
   products: Product[];
-  customers: Customer[];
   invoices: Invoice[];
 };
 
@@ -79,42 +76,6 @@ const loadReportProducts = (): Promise<Product[]> =>
     listProducts({ isActive: true, page, limit: REPORTS_PAGE_SIZE }),
   );
 
-const loadReportCustomers = async (): Promise<Customer[]> => {
-  const customers = await collectPaginatedItems<Customer>((page): Promise<CustomersListResult> =>
-    listCustomers({ page, limit: REPORTS_PAGE_SIZE }),
-  );
-
-  const customersNeedingDebtSummary = customers.filter(
-    (customer) => customer.debtBalance === undefined && customer.debts.length === 0,
-  );
-  if (customersNeedingDebtSummary.length === 0) return customers;
-
-  const settled = await settleWithConcurrency(
-    customersNeedingDebtSummary,
-    REPORTS_CONCURRENCY_LIMIT,
-    async (customer) => ({
-      customerId: customer.id,
-      summary: await getCustomerDebts(customer.id),
-    }),
-  );
-  const summariesByCustomerId = new Map<string, DebtSummary>();
-
-  settled.forEach((result) => {
-    if (result.status === "fulfilled") {
-      summariesByCustomerId.set(result.value.customerId, result.value.summary);
-    }
-  });
-
-  if (summariesByCustomerId.size === 0) return customers;
-
-  return customers.map((customer) => {
-    const summary = summariesByCustomerId.get(customer.id);
-    return summary
-      ? { ...customer, debts: summary.debts, debtBalance: summary.totalRemaining }
-      : customer;
-  });
-};
-
 const hydrateInvoiceItems = async (invoices: Invoice[]): Promise<Invoice[]> => {
   const invoicesWithoutItems = invoices.filter((invoice) => invoice.id && invoice.items.length === 0);
   if (invoicesWithoutItems.length === 0) return invoices;
@@ -144,11 +105,10 @@ const loadReportInvoices = async (): Promise<Invoice[]> => {
 };
 
 export const loadReportsDataset = async (): Promise<ReportsDataset> => {
-  const [products, customers, invoices] = await Promise.all([
+  const [products, invoices] = await Promise.all([
     loadReportProducts(),
-    loadReportCustomers(),
     loadReportInvoices(),
   ]);
 
-  return { products, customers, invoices };
+  return { products, invoices };
 };
