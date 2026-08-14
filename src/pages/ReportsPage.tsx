@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BadgeDollarSign, BarChart3, Boxes, ReceiptText, TrendingUp, WalletCards } from "lucide-react";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { StatusBadge } from "../components/StatusBadge";
-import { getCustomerDebtTotal, getStockStatus, getTopSellingProducts } from "../utils/calculations";
+import { getStockStatus, getTopSellingProducts } from "../utils/calculations";
 import { formatCurrency, formatNumber, toArabicDigits } from "../utils/formatCurrency";
 import { toUserFacingMessage } from "../services/apiClient";
-import { getDailyProfit, type DailyProfit } from "../services/reportsApi";
+import { getStoreDebtSummary, type StoreDebtSummary } from "../services/debtsApi";
+import { getDailyProfit, getDailySales, type DailyProfit, type DailySalesSummary } from "../services/reportsApi";
 import { loadReportsDataset, type ReportsDataset } from "../services/reportsData";
 
 const toLocalDateString = (d: Date): string => {
@@ -19,29 +20,26 @@ const todayString = toLocalDateString(new Date());
 
 const EMPTY_REPORTS_DATASET: ReportsDataset = {
   products: [],
-  customers: [],
   invoices: [],
-};
-
-const isSameDay = (isoString: string, dateString: string): boolean => {
-  try {
-    return toLocalDateString(new Date(isoString)) === dateString;
-  } catch {
-    return false;
-  }
 };
 
 export function ReportsPage() {
   const [selectedDate, setSelectedDate] = useState<string>(todayString);
   const [dailyProfit, setDailyProfit] = useState<DailyProfit | null>(null);
+  const [dailySales, setDailySales] = useState<DailySalesSummary | null>(null);
+  const [debtSummary, setDebtSummary] = useState<StoreDebtSummary | null>(null);
   const [reportsDataset, setReportsDataset] = useState<ReportsDataset>(EMPTY_REPORTS_DATASET);
   const [dailyProfitLoading, setDailyProfitLoading] = useState(false);
+  const [dailySalesLoading, setDailySalesLoading] = useState(false);
+  const [debtSummaryLoading, setDebtSummaryLoading] = useState(false);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [dailyProfitError, setDailyProfitError] = useState<string | null>(null);
+  const [dailySalesError, setDailySalesError] = useState<string | null>(null);
+  const [debtSummaryError, setDebtSummaryError] = useState<string | null>(null);
   const [reportsError, setReportsError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const { products, customers, invoices } = reportsDataset;
+  const { products, invoices } = reportsDataset;
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -50,6 +48,10 @@ export function ReportsPage() {
 
     setDailyProfitLoading(true);
     setDailyProfitError(null);
+    setDailyProfit(null);
+    setDailySalesLoading(true);
+    setDailySalesError(null);
+    setDailySales(null);
 
     getDailyProfit(selectedDate)
       .then((data) => {
@@ -68,8 +70,52 @@ export function ReportsPage() {
         }
       });
 
+    getDailySales(selectedDate)
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setDailySales(data);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setDailySalesError(toUserFacingMessage(err, "تعذر تحميل ملخص الفواتير."));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setDailySalesLoading(false);
+        }
+      });
+
     return () => controller.abort();
   }, [selectedDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDebtSummaryLoading(true);
+    setDebtSummaryError(null);
+
+    getStoreDebtSummary()
+      .then((data) => {
+        if (!cancelled) {
+          setDebtSummary(data);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setDebtSummaryError(toUserFacingMessage(err, "تعذر تحميل إجمالي الديون."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDebtSummaryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,29 +144,30 @@ export function ReportsPage() {
     };
   }, []);
 
-  const loading = dailyProfitLoading || reportsLoading;
-  const error = dailyProfitError ?? reportsError;
+  const loading = dailyProfitLoading || dailySalesLoading || debtSummaryLoading;
+  const error = dailyProfitError ?? dailySalesError ?? debtSummaryError ?? reportsError;
 
   const stats = useMemo(() => {
-    const totalDebt = customers.reduce((sum, customer) => sum + getCustomerDebtTotal(customer), 0);
     const lowStockProducts = products.filter((product) => product.stock < 5);
-    const selectedInvoices = invoices.filter((invoice) => isSameDay(invoice.date, selectedDate));
 
     return {
-      invoicesCount: selectedInvoices.length,
-      totalDebt,
       lowStockProducts,
       topSellingProducts: getTopSellingProducts(invoices),
     };
-  }, [products, customers, invoices, selectedDate]);
+  }, [products, invoices]);
 
   const isToday = selectedDate === todayString;
 
   const revenue = dailyProfit?.totalRevenue ?? null;
   const profit = dailyProfit?.netProfit ?? null;
+  const invoicesCount = dailySales?.invoiceCount ?? null;
+  const totalDebt = debtSummary?.totalRemaining ?? null;
 
   const displayValue = (val: number | null): string =>
     val === null ? "—" : formatCurrency(val);
+
+  const displayNumber = (val: number | null): string =>
+    val === null ? "—" : formatNumber(val);
 
   return (
     <div className="space-y-5">
@@ -146,7 +193,7 @@ export function ReportsPage() {
 
       {/* KPI cards */}
       <section className="grid gap-3 min-[460px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${loading ? "opacity-50" : ""}`}>
+        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${dailyProfitLoading ? "opacity-50" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-normal text-zinc-500">مبيعات {isToday ? "اليوم" : "اليوم المختار"}</p>
             <TrendingUp className="h-5 w-5 text-brand-600" />
@@ -156,7 +203,7 @@ export function ReportsPage() {
           </p>
         </div>
 
-        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${loading ? "opacity-50" : ""}`}>
+        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${dailyProfitLoading ? "opacity-50" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-normal text-zinc-500">ربح {isToday ? "اليوم" : "اليوم المختار"}</p>
             <BadgeDollarSign className="h-5 w-5 text-emerald-600" />
@@ -166,7 +213,7 @@ export function ReportsPage() {
           </p>
         </div>
 
-        <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${dailySalesLoading ? "opacity-50" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-normal text-zinc-500">
               {isToday ? "عدد فواتير اليوم" : "عدد فواتير اليوم المختار"}
@@ -174,17 +221,17 @@ export function ReportsPage() {
             <ReceiptText className="h-5 w-5 text-sky-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-zinc-950 sm:text-3xl">
-            <AnimatedDigits value={formatNumber(stats.invoicesCount)} />
+            <AnimatedDigits value={displayNumber(invoicesCount)} />
           </p>
         </div>
 
-        <div className="flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className={`flex min-h-28 flex-col justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-opacity ${debtSummaryLoading ? "opacity-50" : ""}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-normal text-zinc-500">إجمالي الديون</p>
             <WalletCards className="h-5 w-5 text-red-600" />
           </div>
           <p className="mt-auto pt-4 text-2xl font-extrabold text-red-700 sm:text-3xl">
-            <AnimatedDigits value={formatCurrency(stats.totalDebt)} />
+            <AnimatedDigits value={displayValue(totalDebt)} />
           </p>
         </div>
 
