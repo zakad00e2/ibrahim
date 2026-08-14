@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCustomerDebts, payCustomerDebtAuto, payDebt } from "./debtsApi";
+import { getCustomerDebts, getStoreDebtSummary, payCustomerDebtAuto, payDebt } from "./debtsApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -62,6 +62,30 @@ describe("debtsApi", () => {
       remaining: 40,
       payments: [{ amount: 60 }],
     });
+  });
+
+  it("maps the authoritative store debt summary from money strings", async () => {
+    const fetchMock = mockFetch(new Response(JSON.stringify({
+      totalDebts: 115,
+      totalAmount: "11316",
+      totalPaid: "1430",
+      totalRemaining: "9886",
+      unpaidCount: 87,
+      unpaidRemaining: "9886",
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(getStoreDebtSummary()).resolves.toEqual({
+      totalDebts: 115,
+      totalAmount: 11316,
+      totalPaid: 1430,
+      totalRemaining: 9886,
+      unpaidCount: 87,
+      unpaidRemaining: 9886,
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/debts/summary", expect.objectContaining({ method: "GET" }));
   });
 
   it("omits clientOperationId from single debt payment requests", async () => {

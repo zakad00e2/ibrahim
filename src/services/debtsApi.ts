@@ -70,6 +70,33 @@ export const getCustomerDebts = async (customerId: string): Promise<DebtSummary>
   return mapDebtSummaryResponse(payload);
 };
 
+export type StoreDebtSummary = {
+  totalDebts: number;
+  totalAmount: number;
+  totalPaid: number;
+  totalRemaining: number;
+  unpaidCount: number;
+  unpaidRemaining: number;
+};
+
+const mapStoreDebtSummary = (payload: unknown): StoreDebtSummary => {
+  const data = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
+  if (!isRecord(data)) throw new Error("invalid store debt summary response");
+
+  return {
+    totalDebts: firstApiNumber(data.totalDebts) ?? 0,
+    totalAmount: firstApiNumber(data.totalAmount) ?? 0,
+    totalPaid: firstApiNumber(data.totalPaid) ?? 0,
+    totalRemaining: firstApiNumber(data.totalRemaining) ?? 0,
+    unpaidCount: firstApiNumber(data.unpaidCount) ?? 0,
+    unpaidRemaining: firstApiNumber(data.unpaidRemaining) ?? 0,
+  };
+};
+
+export const getStoreDebtSummary = async (): Promise<StoreDebtSummary> => {
+  return mapStoreDebtSummary(await getJson("/api/debts/summary"));
+};
+
 export type DebtPaymentOptions = {
   clientOperationId?: string;
   fallbackDebt?: Debt;
