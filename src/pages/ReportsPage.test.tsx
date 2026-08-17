@@ -96,6 +96,7 @@ describe("ReportsPage summary cards", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     document.body.innerHTML = "";
   });
 
@@ -178,6 +179,59 @@ describe("ReportsPage summary cards", () => {
     const invoiceCard = cardText(view.container, "عدد فواتير اليوم المختار");
     expect(invoiceCard).toContain("٧");
     expect(invoiceCard).not.toContain("٣");
+    await unmount(view);
+  });
+
+  it("selects the current calendar day when the reports page mounts after midnight", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2099, 0, 2, 0, 1));
+
+    const view = await renderReports();
+    const dateInput = view.container.querySelector<HTMLInputElement>("#report-date");
+
+    expect(dateInput?.value).toBe("2099-01-02");
+
+    await unmount(view);
+    vi.useRealTimers();
+  });
+
+  it("moves an open today report to the next day at midnight", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2099, 0, 1, 23, 59, 50));
+
+    const view = await renderReports();
+    const dateInput = view.container.querySelector<HTMLInputElement>("#report-date");
+    expect(dateInput?.value).toBe("2099-01-01");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(dateInput?.value).toBe("2099-01-02");
+    await unmount(view);
+  });
+
+  it("keeps a manually selected report date when midnight passes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2099, 0, 1, 23, 59, 50));
+
+    const view = await renderReports();
+    const dateInput = view.container.querySelector<HTMLInputElement>("#report-date");
+    if (!dateInput) throw new Error("report date input not found");
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!valueSetter) throw new Error("date input value setter not found");
+      valueSetter.call(dateInput, "2098-12-31");
+      dateInput.dispatchEvent(new Event("input", { bubbles: true }));
+      dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(dateInput.value).toBe("2098-12-31");
     await unmount(view);
   });
 });

@@ -16,15 +16,14 @@ const toLocalDateString = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
-const todayString = toLocalDateString(new Date());
-
 const EMPTY_REPORTS_DATASET: ReportsDataset = {
   products: [],
   invoices: [],
 };
 
 export function ReportsPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(todayString);
+  const [currentDate, setCurrentDate] = useState(() => toLocalDateString(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(currentDate);
   const [dailyProfit, setDailyProfit] = useState<DailyProfit | null>(null);
   const [dailySales, setDailySales] = useState<DailySalesSummary | null>(null);
   const [debtSummary, setDebtSummary] = useState<StoreDebtSummary | null>(null);
@@ -39,7 +38,35 @@ export function ReportsPage() {
   const [reportsError, setReportsError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const currentDateRef = useRef(currentDate);
   const { products, invoices } = reportsDataset;
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      timeoutId = window.setTimeout(() => {
+        const nextDate = toLocalDateString(new Date());
+        const previousDate = currentDateRef.current;
+
+        currentDateRef.current = nextDate;
+        setCurrentDate(nextDate);
+        setSelectedDate((date) => (date === previousDate ? nextDate : date));
+        scheduleMidnightRefresh();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    scheduleMidnightRefresh();
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -156,7 +183,7 @@ export function ReportsPage() {
     };
   }, [products, invoices]);
 
-  const isToday = selectedDate === todayString;
+  const isToday = selectedDate === currentDate;
 
   const revenue = dailyProfit?.totalRevenue ?? null;
   const profit = dailyProfit?.netProfit ?? null;
