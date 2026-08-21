@@ -393,6 +393,23 @@ describe("offlineDb", () => {
     ]);
   });
 
+  it("lists legacy queued writes that were stored before session owners existed", async () => {
+    await queueOfflineOperation("store-a", {
+      type: "createInvoice",
+      payload: {
+        items: [],
+        paymentMethod: "debt",
+        customerId: "c1",
+      },
+      clientOperationId: "invoice-op-legacy",
+    });
+
+    const claimed = await listOfflineOperations("store-a", "user:new");
+
+    expect(claimed).toMatchObject([{ clientOperationId: "invoice-op-legacy" }]);
+    expect(claimed[0].ownerSessionKey).toBeUndefined();
+  });
+
   it("clears cached sensitive data and pending writes on logout", async () => {
     await replaceCachedProducts("store-a", [makeProduct()]);
     await replaceCachedCustomers("store-a", [makeCustomer()]);

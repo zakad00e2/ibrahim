@@ -789,4 +789,131 @@ describe("AppStore product actions", () => {
     expect(mounted.getStore().customers).toEqual([oldestCustomer, middleCustomer]);
     expect(mounted.getStore().customers).not.toContainEqual(syncedCustomer);
   });
+
+  it("refreshes cached customer debts from the server while reads come from the offline cache", async () => {
+    const cachedCustomer: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debts: [],
+      debtBalance: 0,
+    };
+    const serverDebt = {
+      id: "debt-1",
+      invoiceId: "invoice-1",
+      description: "فاتورة INV-1",
+      date: "2026-08-21T10:00:00.000Z",
+      amount: 100,
+      paid: 0,
+      remaining: 100,
+    };
+    offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
+    offlineDbMocks.listCachedCustomers.mockResolvedValue({
+      items: [cachedCustomer],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    debtApiMocks.getCustomerDebts.mockResolvedValue({
+      debts: [serverDebt],
+      totalDebt: 100,
+      totalRemaining: 100,
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([
+        { ...cachedCustomer, debts: [serverDebt], debtBalance: 100 },
+      ]);
+    });
+    expect(customerApiMocks.listCustomers).not.toHaveBeenCalled();
+    expect(offlineDbMocks.cacheCustomerDebts).toHaveBeenCalledWith(
+      "store:store-1",
+      "customer-1",
+      [serverDebt],
+      100,
+    );
+  });
+
+  it("keeps an unsynced local debt when refreshing cached customer debts", async () => {
+    const unsyncedDebt = {
+      id: "offline-debt-offline-invoice-1",
+      invoiceId: "offline-invoice-1",
+      description: "فاتورة محلية",
+      date: "2026-08-21T09:00:00.000Z",
+      amount: 50,
+      paid: 0,
+      remaining: 50,
+      isPaid: false,
+    };
+    const cachedCustomer: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debts: [unsyncedDebt],
+      debtBalance: 50,
+    };
+    const serverDebt = {
+      id: "debt-1",
+      invoiceId: "invoice-1",
+      description: "فاتورة INV-1",
+      date: "2026-08-21T10:00:00.000Z",
+      amount: 100,
+      paid: 0,
+      remaining: 100,
+    };
+    offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
+    offlineDbMocks.listCachedCustomers.mockResolvedValue({
+      items: [cachedCustomer],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    debtApiMocks.getCustomerDebts.mockResolvedValue({
+      debts: [serverDebt],
+      totalDebt: 100,
+      totalRemaining: 100,
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([
+        { ...cachedCustomer, debts: [unsyncedDebt, serverDebt], debtBalance: 150 },
+      ]);
+    });
+  });
+
+  it("keeps the cached debt balance when the debt response has a total without details", async () => {
+    const cachedCustomer: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debts: [],
+      debtBalance: 70,
+    };
+    offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
+    offlineDbMocks.listCachedCustomers.mockResolvedValue({
+      items: [cachedCustomer],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    debtApiMocks.getCustomerDebts.mockResolvedValue({
+      debts: [],
+      totalDebt: 70,
+      totalRemaining: 70,
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([cachedCustomer]);
+    });
+    expect(offlineDbMocks.cacheCustomerDebts).not.toHaveBeenCalled();
+  });
 });

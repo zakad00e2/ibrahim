@@ -776,9 +776,14 @@ export async function queueOfflineOperation(
 }
 
 export const listOfflineOperations = async (storeKey?: string, ownerSessionKey?: string): Promise<OfflineOperation[]> => {
+  // Operations queued before owner tracking existed carry no owner, so any session of the same
+  // store must claim them. Otherwise they stay queued forever and never reach the server.
+  const isOwnedBySession = (operation: OfflineOperation) =>
+    ownerSessionKey === undefined ||
+    operation.ownerSessionKey === undefined ||
+    operation.ownerSessionKey === ownerSessionKey;
   const isPending = (operation: OfflineOperation) =>
-    (operation.status ?? "pending") === "pending" &&
-    (ownerSessionKey === undefined || operation.ownerSessionKey === ownerSessionKey);
+    (operation.status ?? "pending") === "pending" && isOwnedBySession(operation);
 
   if (storeKey === undefined) {
     return (await offlineDb.offlineQueue.orderBy("createdAt").toArray()).filter(isPending);

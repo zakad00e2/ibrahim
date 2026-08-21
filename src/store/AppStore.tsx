@@ -271,6 +271,19 @@ const createOfflineDebtFromInvoice = (invoice: Invoice): Debt => ({
 
 const isOfflineCustomerId = (id?: string): boolean => id?.startsWith("offline-customer-") ?? false;
 
+const isOfflineDebtId = (id?: string): boolean => id?.startsWith("offline-debt-") ?? false;
+
+// Local debts created while offline stay in the list until their invoice reaches the server,
+// otherwise a server refresh would hide a sale the cashier already made.
+const mergeUnsyncedLocalDebts = (serverDebts: Debt[], cachedDebts: Debt[]): Debt[] => {
+  const syncedInvoiceIds = new Set(serverDebts.map((debt) => debt.invoiceId));
+  const unsynced = cachedDebts.filter(
+    (debt) => isOfflineDebtId(debt.id) && !syncedInvoiceIds.has(debt.invoiceId),
+  );
+
+  return [...unsynced, ...serverDebts];
+};
+
 const productMatchesQuery = (product: Product, query: ProductsQuery): boolean => {
   const search = query.search.trim().toLowerCase();
   const matchesActiveState = query.isActive === undefined || product.isActive === query.isActive;
@@ -383,7 +396,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setProductsError(null);
     try {
       const isOnline = getBrowserOnlineState();
-      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
         const cached = await listCachedProducts(storeCacheKey, query);
@@ -416,7 +429,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setProductsLoading(false);
     }
-  }, [storeCacheKey]);
+  }, [queueOwnerKey, storeCacheKey]);
 
   const fetchCashierProducts = useCallback(async () => {
     if (!storeCacheKey) {
@@ -428,7 +441,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setCashierProductsError(null);
     try {
       const isOnline = getBrowserOnlineState();
-      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       const cacheQuery = { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER };
 
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
@@ -472,7 +485,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setCashierProductsLoading(false);
     }
-  }, [storeCacheKey]);
+  }, [queueOwnerKey, storeCacheKey]);
 
   const fetchLowStock = useCallback(async () => {
     if (!storeCacheKey) {
@@ -482,7 +495,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     try {
       const isOnline = getBrowserOnlineState();
-      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         const cached = await listCachedProducts(storeCacheKey, { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
         setLowStockCount(cached.items.filter((product) => product.stock <= product.minStock).length);
@@ -500,7 +513,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         // non-critical, silent fail
       }
     }
-  }, [storeCacheKey]);
+  }, [queueOwnerKey, storeCacheKey]);
 
   const productsQueryRef = useRef(productsQuery);
   productsQueryRef.current = productsQuery;
@@ -558,6 +571,35 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, [storeCacheKey]);
 
+  // Cached customer rows carry a debt balance that only changes on a customers refetch, so a debt
+  // created on the server (or by another device) stays invisible while reads are cache-first.
+  const refreshCachedCustomerDebts = useCallback(async (items: Customer[]): Promise<Customer[]> => {
+    if (!storeCacheKey || items.length === 0) return items;
+
+    const settled = await Promise.allSettled(
+      items.map(async (customer) => {
+        const summary = await getCustomerDebts(customer.id);
+
+        // An incomplete response must never overwrite a cached balance with a false zero.
+        if (summary.debts.length === 0 && compareMoney(summary.totalRemaining, 0) === 1) {
+          return customer;
+        }
+
+        const debts = mergeUnsyncedLocalDebts(summary.debts, customer.debts);
+        const debtBalance = debts.length > 0 ? calculateCustomerDebt(debts) : summary.totalRemaining;
+        await cacheCustomerDebts(storeCacheKey, customer.id, debts, debtBalance);
+        return { ...customer, debts, debtBalance };
+      }),
+    );
+
+    return items.map((customer, index) => {
+      const result = settled[index];
+      if (result.status === "fulfilled") return result.value;
+      if (isNetworkFailure(result.reason)) setIsOffline(true);
+      return customer;
+    });
+  }, [storeCacheKey]);
+
   const fetchCustomers = useCallback(async (query: CustomersQuery) => {
     if (!storeCacheKey) {
       setCustomers([]);
@@ -569,11 +611,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setCustomersError(null);
     try {
       const isOnline = getBrowserOnlineState();
-      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
         const cached = await listCachedCustomers(storeCacheKey, query);
-        setCustomers(cached.items);
+        setCustomers(isOnline ? await refreshCachedCustomerDebts(cached.items) : cached.items);
         setCustomersTotal(cached.total);
         return;
       }
@@ -606,7 +648,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setCustomersLoading(false);
     }
-  }, [hydrateCustomerDebtSummaries, storeCacheKey]);
+  }, [hydrateCustomerDebtSummaries, queueOwnerKey, refreshCachedCustomerDebts, storeCacheKey]);
 
   const customersQueryRef = useRef(customersQuery);
   customersQueryRef.current = customersQuery;
@@ -628,7 +670,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setInvoicesError(null);
     try {
       const isOnline = getBrowserOnlineState();
-      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey);
+      const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
         const cached = await listCachedInvoices(storeCacheKey, query);
@@ -660,7 +702,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setInvoicesLoading(false);
     }
-  }, [storeCacheKey]);
+  }, [queueOwnerKey, storeCacheKey]);
 
   const invoicesQueryRef = useRef(invoicesQuery);
   invoicesQueryRef.current = invoicesQuery;
