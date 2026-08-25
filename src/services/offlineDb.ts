@@ -679,13 +679,25 @@ export async function upsertCachedDebts(
   await offlineDb.debts.bulkPut(items.map((debt) => toCachedDebt(storeKey, debt)));
 }
 
-export function cacheCustomerDebts(customerId: string, debts: Debt[], debtBalance: number): Promise<void>;
-export function cacheCustomerDebts(storeKey: string, customerId: string, debts: Debt[], debtBalance: number): Promise<void>;
+export function cacheCustomerDebts(
+  customerId: string,
+  debts: Debt[],
+  debtBalance: number,
+  creditBalance?: number,
+): Promise<void>;
+export function cacheCustomerDebts(
+  storeKey: string,
+  customerId: string,
+  debts: Debt[],
+  debtBalance: number,
+  creditBalance?: number,
+): Promise<void>;
 export async function cacheCustomerDebts(
   storeKeyOrCustomerId: string,
   customerIdOrDebts: string | Debt[],
   debtsOrDebtBalance: Debt[] | number,
   maybeDebtBalance?: number,
+  maybeCreditBalance?: number,
 ): Promise<void> {
   const storeKey = Array.isArray(customerIdOrDebts)
     ? DEFAULT_OFFLINE_STORE_KEY
@@ -699,11 +711,20 @@ export async function cacheCustomerDebts(
   const debtBalance = Array.isArray(customerIdOrDebts)
     ? debtsOrDebtBalance as number
     : maybeDebtBalance ?? 0;
+  const creditBalance = Array.isArray(customerIdOrDebts)
+    ? maybeDebtBalance ?? 0
+    : maybeCreditBalance ?? 0;
 
   await offlineDb.transaction("rw", offlineDb.customers, offlineDb.debts, async () => {
     const customer = await offlineDb.customers.get(buildCustomerCacheId(storeKey, customerId));
     if (customer) {
-      await offlineDb.customers.put({ ...customer, debts, debtBalance });
+      await offlineDb.customers.put({
+        ...customer,
+        debts,
+        debtBalance,
+        creditBalance,
+        balance: creditBalance - debtBalance,
+      });
     }
 
     const previousDebts = await offlineDb.debts.where("[storeKey+customerId]").equals([storeKey, customerId]).toArray();

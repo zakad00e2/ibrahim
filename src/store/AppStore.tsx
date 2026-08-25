@@ -71,6 +71,7 @@ import {
 import {
   applyCustomerDebtPayment,
   applyDebtPayment,
+  applyOfflineDebtWithCredit,
   buildOfflineCustomer,
   applyOfflineSaleToProducts,
   buildOfflineInvoice,
@@ -85,6 +86,7 @@ import {
   calculateInvoiceTotal,
   calculateInvoiceItemTotal,
   calculateItemsTotal,
+  getCustomerCreditBalance,
   getCustomerDebtTotal,
   validateInvoiceDiscount,
   validateDebtPaymentAmount,
@@ -231,10 +233,30 @@ const getSessionStoreCacheKey = (session: AuthSession | null): string | null => 
   return null;
 };
 
-const toDebtSummary = (debts: Debt[]): DebtSummary => ({
-  totalDebt: sumMoney(debts.map((debt) => debt.amount)),
-  totalRemaining: sumMoney(debts.map((debt) => debt.remaining)),
+const toDebtSummary = (debts: Debt[], creditBalance = 0): DebtSummary => {
+  const totalRemaining = sumMoney(debts.map((debt) => debt.remaining));
+
+  return {
+    totalDebt: sumMoney(debts.map((debt) => debt.amount)),
+    totalRemaining,
+    creditBalance,
+    balance: subtractMoney(creditBalance, totalRemaining),
+    debts,
+  };
+};
+
+const applyDebtSummaryToCustomer = (
+  customer: Customer,
+  summary: DebtSummary,
+  debts = summary.debts,
+): Customer => ({
+  ...customer,
   debts,
+  debtBalance: summary.totalRemaining,
+  creditBalance: summary.creditBalance ?? customer.creditBalance ?? 0,
+  balance:
+    summary.balance ??
+    subtractMoney(summary.creditBalance ?? customer.creditBalance ?? 0, summary.totalRemaining),
 });
 
 const mergeDebtMetadata = (debt: Debt, fallback?: Debt): Debt => {
@@ -348,6 +370,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [cashierProducts, setCashierProducts] = useState<Product[]>([]);
   const [cashierProductsLoading, setCashierProductsLoading] = useState(false);
   const [cashierProductsError, setCashierProductsError] = useState<string | null>(null);
+  const cashierBarcodeRevisionRef = useRef(0);
+  const cashierBarcodeProductsRef = useRef(new Map<string, { product: Product; revision: number }>());
   const [lowStockCount, setLowStockCount] = useState(0);
 
   // ── Customers ────────────────────────────────────────────────────────────────
@@ -372,6 +396,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setCashierProducts([]);
     setCashierProductsLoading(false);
     setCashierProductsError(null);
+    cashierBarcodeRevisionRef.current = 0;
+    cashierBarcodeProductsRef.current.clear();
     setLowStockCount(0);
     setCustomers([]);
     setCustomersLoading(false);
@@ -431,6 +457,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [queueOwnerKey, storeCacheKey]);
 
+  const mergeBarcodeProductsResolvedAfter = useCallback((items: Product[], revision: number): Product[] => {
+    const resolved = Array.from(cashierBarcodeProductsRef.current.values())
+      .filter((entry) => entry.revision > revision)
+      .sort((left, right) => right.revision - left.revision)
+      .map((entry) => entry.product);
+
+    if (resolved.length === 0) return items;
+
+    return [
+      ...resolved,
+      ...items.filter((item) => !resolved.some(
+        (product) => product.id === item.id || product.barcode === item.barcode,
+      )),
+    ];
+  }, []);
+
   const fetchCashierProducts = useCallback(async () => {
     if (!storeCacheKey) {
       setCashierProducts([]);
@@ -439,15 +481,27 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     setCashierProductsLoading(true);
     setCashierProductsError(null);
+    const barcodeRevisionAtStart = cashierBarcodeRevisionRef.current;
     try {
       const isOnline = getBrowserOnlineState();
       const hasPendingOfflineWrites = await hasOfflineOperations(storeCacheKey, queueOwnerKey);
       const cacheQuery = { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER };
+      const readsMustUseCache = shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites);
+      let cachedItems: Product[] = [];
 
-      if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
+      try {
+        cachedItems = (await listCachedProducts(storeCacheKey, cacheQuery)).items;
+      } catch (cacheError) {
+        if (readsMustUseCache) throw cacheError;
+      }
+
+      if (cachedItems.length > 0) {
+        setCashierProducts(mergeBarcodeProductsResolvedAfter(cachedItems, barcodeRevisionAtStart));
+      }
+
+      if (readsMustUseCache) {
         if (!isOnline) setIsOffline(true);
-        const cached = await listCachedProducts(storeCacheKey, cacheQuery);
-        setCashierProducts(cached.items);
+        setCashierProducts(mergeBarcodeProductsResolvedAfter(cachedItems, barcodeRevisionAtStart));
         return;
       }
 
@@ -470,12 +524,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
 
       await upsertCachedProducts(storeCacheKey, items);
-      setCashierProducts(items);
+      setCashierProducts(mergeBarcodeProductsResolvedAfter(items, barcodeRevisionAtStart));
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
         const cached = await listCachedProducts(storeCacheKey, { isActive: true, page: 1, limit: Number.MAX_SAFE_INTEGER });
-        setCashierProducts(cached.items);
+        setCashierProducts(mergeBarcodeProductsResolvedAfter(cached.items, barcodeRevisionAtStart));
         if (cached.items.length === 0) {
           setCashierProductsError("تعذر تحميل منتجات الكاشير.");
         }
@@ -485,7 +539,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     } finally {
       setCashierProductsLoading(false);
     }
-  }, [queueOwnerKey, storeCacheKey]);
+  }, [mergeBarcodeProductsResolvedAfter, queueOwnerKey, storeCacheKey]);
 
   const fetchLowStock = useCallback(async () => {
     if (!storeCacheKey) {
@@ -546,13 +600,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       missingSummaries.map(async (customer) => {
         try {
           const summary = await getCustomerDebts(customer.id);
-          await cacheCustomerDebts(storeCacheKey, customer.id, summary.debts, summary.totalRemaining);
+          await cacheCustomerDebts(
+            storeCacheKey,
+            customer.id,
+            summary.debts,
+            summary.totalRemaining,
+            summary.creditBalance ?? 0,
+          );
           return { customerId: customer.id, summary };
         } catch (err) {
           if (!isNetworkFailure(err)) throw err;
           setIsOffline(true);
           const debts = await listCachedCustomerDebts(storeCacheKey, customer.id);
-          return { customerId: customer.id, summary: toDebtSummary(debts) };
+          const cachedCustomer = await getCachedCustomer(storeCacheKey, customer.id);
+          return {
+            customerId: customer.id,
+            summary: toDebtSummary(debts, cachedCustomer?.creditBalance ?? 0),
+          };
         }
       }),
     );
@@ -567,7 +631,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     return items.map((customer) => {
       const summary = summariesByCustomerId.get(customer.id);
-      return summary ? { ...customer, debts: summary.debts, debtBalance: summary.totalRemaining } : customer;
+      return summary ? applyDebtSummaryToCustomer(customer, summary) : customer;
     });
   }, [storeCacheKey]);
 
@@ -587,8 +651,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
         const debts = mergeUnsyncedLocalDebts(summary.debts, customer.debts);
         const debtBalance = debts.length > 0 ? calculateCustomerDebt(debts) : summary.totalRemaining;
-        await cacheCustomerDebts(storeCacheKey, customer.id, debts, debtBalance);
-        return { ...customer, debts, debtBalance };
+        await cacheCustomerDebts(
+          storeCacheKey,
+          customer.id,
+          debts,
+          debtBalance,
+          summary.creditBalance ?? customer.creditBalance ?? 0,
+        );
+        return applyDebtSummaryToCustomer(customer, { ...summary, debts, totalRemaining: debtBalance }, debts);
       }),
     );
 
@@ -824,6 +894,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     try {
       const product = await getProductByBarcode(barcode);
       await upsertCachedProducts(storeCacheKey, [product]);
+      cashierBarcodeRevisionRef.current += 1;
+      cashierBarcodeProductsRef.current.set(product.id, {
+        product,
+        revision: cashierBarcodeRevisionRef.current,
+      });
+      setCashierProducts((current) => {
+        const existingIndex = current.findIndex((item) => item.id === product.id || item.barcode === product.barcode);
+        if (existingIndex === -1) return [product, ...current];
+
+        return current.map((item, index) => index === existingIndex ? product : item);
+      });
       return product;
     } catch (err) {
       if (isNetworkFailure(err)) {
@@ -853,11 +934,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     try {
       debtSummary = await getCustomerDebts(id);
-      await cacheCustomerDebts(storeCacheKey, id, debtSummary.debts, debtSummary.totalRemaining);
+      await cacheCustomerDebts(
+        storeCacheKey,
+        id,
+        debtSummary.debts,
+        debtSummary.totalRemaining,
+        debtSummary.creditBalance ?? 0,
+      );
     } catch (err) {
       if (isNetworkFailure(err)) {
         setIsOffline(true);
-        debtSummary = toDebtSummary(await listCachedCustomerDebts(storeCacheKey, id));
+        const cachedCustomer = await getCachedCustomer(storeCacheKey, id);
+        debtSummary = toDebtSummary(
+          await listCachedCustomerDebts(storeCacheKey, id),
+          cachedCustomer?.creditBalance ?? 0,
+        );
       }
     }
 
@@ -869,11 +960,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return current.map((c) => {
         if (c.id !== id) return c;
         const base = rich ?? c;
-        const debts = debtSummary ? debtSummary.debts : base.debts;
+        if (!debtSummary) return base;
+        const debts = debtSummary.debts.map((debt) =>
+          mergeDebtMetadata(debt, rich?.debts.find((item) => item.id === debt.id)),
+        );
         const debtBalance =
-          debtSummary?.totalRemaining ??
+          debtSummary.totalRemaining ??
           (debts.length > 0 ? calculateCustomerDebt(debts) : (base.debtBalance ?? c.debtBalance));
-        return { ...base, debts, debtBalance };
+        return applyDebtSummaryToCustomer(base, { ...debtSummary, totalRemaining: debtBalance }, debts);
       });
     });
   }, [storeCacheKey]);
@@ -967,7 +1061,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (!customer) return { ok: false, message: "العميل غير موجود" };
       if (!Number.isFinite(amount) || amount <= 0) return { ok: false, message: "أدخل مبلغ تسديد صحيح" };
       const totalDebt = getCustomerDebtTotal(customer);
-      if (compareMoney(amount, totalDebt) === 1) return { ok: false, message: "مبلغ التسديد أكبر من إجمالي الدين" };
 
       const optimisticCustomers = applyCustomerDebtPayment(customers, customerId, amount);
       const clientOperationId = createClientOperationId("pay-customer-debt");
@@ -988,17 +1081,40 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
       try {
         const summary = await payCustomerDebtAuto(customerId, amount, notes, { clientOperationId });
+        let refreshedCustomer: Customer | null = null;
+        try {
+          refreshedCustomer = await getCustomerById(customerId);
+        } catch {
+          // The payment is already saved; keep its successful result if refreshing history fails.
+        }
         const debts = summary.debts.map((debt) =>
-          mergeDebtMetadata(debt, customer.debts.find((item) => item.id === debt.id)),
-        );
-        const totalRemaining = debts.length > 0 ? calculateCustomerDebt(debts) : summary.totalRemaining;
-        await cacheCustomerDebts(storeCacheKey, customerId, debts, totalRemaining);
-        setCustomers((current) =>
-          current.map((c) =>
-            c.id === customerId ? { ...c, debts, debtBalance: totalRemaining } : c,
+          mergeDebtMetadata(
+            debt,
+            refreshedCustomer?.debts.find((item) => item.id === debt.id) ??
+              customer.debts.find((item) => item.id === debt.id),
           ),
         );
-        return { ok: true, message: "تم تسجيل التسديد بنجاح" };
+        const reconciledSummary = { ...summary, debts };
+        await cacheCustomerDebts(
+          storeCacheKey,
+          customerId,
+          debts,
+          summary.totalRemaining,
+          summary.creditBalance ?? 0,
+        );
+        setCustomers((current) =>
+          current.map((c) =>
+            c.id === customerId
+              ? applyDebtSummaryToCustomer(refreshedCustomer ?? c, reconciledSummary, debts)
+              : c,
+          ),
+        );
+        const creditCreated = subtractMoney(summary.creditBalance ?? 0, getCustomerCreditBalance(customer));
+        const message =
+          compareMoney(amount, totalDebt) === 1 && compareMoney(creditCreated, 0) === 1
+            ? `تم تسجيل التسديد بنجاح. تم إضافة ${creditCreated} إلى رصيد العميل.`
+            : "تم تسجيل التسديد بنجاح";
+        return { ok: true, message };
       } catch (err) {
         if (isNetworkFailure(err)) {
           setIsOffline(true);
@@ -1015,10 +1131,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         // Rollback optimistic update by reloading fresh debt data
         getCustomerDebts(customerId)
           .then((summary) => {
-            void cacheCustomerDebts(storeCacheKey, customerId, summary.debts, summary.totalRemaining);
+            void cacheCustomerDebts(
+              storeCacheKey,
+              customerId,
+              summary.debts,
+              summary.totalRemaining,
+              summary.creditBalance ?? 0,
+            );
             setCustomers((current) =>
               current.map((c) =>
-                c.id === customerId ? { ...c, debts: summary.debts, debtBalance: summary.totalRemaining } : c,
+                c.id === customerId ? applyDebtSummaryToCustomer(c, summary) : c,
               ),
             );
           })
@@ -1212,13 +1334,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (invoice.remaining > 0 && customer) {
           const offlineDebt = createOfflineDebtFromInvoice(invoice);
           nextCustomers = customers.map((item) =>
-            item.id === customer.id
-              ? {
-                  ...item,
-                  debts: [offlineDebt, ...item.debts],
-                  debtBalance: addMoney(getCustomerDebtTotal(item), offlineDebt.remaining),
-                }
-              : item,
+            item.id === customer.id ? applyOfflineDebtWithCredit(item, offlineDebt) : item,
           );
           await upsertCachedCustomers(storeCacheKey, nextCustomers);
         }

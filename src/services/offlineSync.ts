@@ -1,10 +1,13 @@
-import type { Customer, CustomerInput, Invoice, InvoiceItem, Product, SaleRequest } from "../types";
+import type { Customer, CustomerInput, Debt, Invoice, InvoiceItem, Product, SaleRequest } from "../types";
 import type { OfflineOperation } from "./offlineDb";
 import {
+  applyCreditToNewDebt,
   calculateCustomerDebt,
   calculateInvoiceTotal,
   calculateInvoiceItemTotal,
+  getCustomerCreditBalance,
   getCustomerDebtTotal,
+  syncCustomerBalances,
 } from "../utils/calculations";
 import { addMoney, compareMoney, maxMoney, minMoney, subtractMoney } from "../utils/money";
 import { getInvoiceItemStockQuantity, getSaleUnit } from "../utils/carton";
@@ -181,6 +184,8 @@ export const buildOfflineCustomer = (
     name: input.name.trim(),
     phone: input.phone.trim(),
     debtBalance: initialDebt,
+    creditBalance: 0,
+    balance: initialDebt > 0 ? -initialDebt : 0,
     debts,
   };
 };
@@ -227,9 +232,16 @@ export const applyCustomerDebtPayment = (
     if (customer.id !== customerId) return customer;
 
     if (customer.debts.length === 0) {
+      const totalDebt = getCustomerDebtTotal(customer);
+      const appliedToDebt = minMoney(totalDebt, amount);
+      const excess = subtractMoney(amount, appliedToDebt);
+
       return {
         ...customer,
-        debtBalance: maxMoney(subtractMoney(getCustomerDebtTotal(customer), amount), 0),
+        ...syncCustomerBalances(customer, {
+          debtBalance: maxMoney(subtractMoney(totalDebt, appliedToDebt), 0),
+          creditBalance: addMoney(getCustomerCreditBalance(customer), excess),
+        }),
       };
     }
 
@@ -249,12 +261,51 @@ export const applyCustomerDebtPayment = (
       };
     });
 
+    const creditBalance =
+      compareMoney(remainingPayment, 0) === 1
+        ? addMoney(getCustomerCreditBalance(customer), remainingPayment)
+        : getCustomerCreditBalance(customer);
+
     return {
       ...customer,
-      debts,
-      debtBalance: calculateCustomerDebt(debts),
+      ...syncCustomerBalances(customer, {
+        debts,
+        debtBalance: calculateCustomerDebt(debts),
+        creditBalance,
+      }),
     };
   });
+};
+
+export const applyOfflineDebtWithCredit = (
+  customer: Customer,
+  debt: Debt,
+): Customer => {
+  const { creditUsed, remainingDebt, creditBalance } = applyCreditToNewDebt(customer, debt.remaining);
+  const reconciledDebt =
+    compareMoney(creditUsed, 0) === 1
+      ? {
+          ...debt,
+          paid: addMoney(debt.paid, creditUsed),
+          remaining: remainingDebt,
+          isPaid: compareMoney(remainingDebt, 0) === 0 ? true : debt.isPaid,
+        }
+      : debt;
+
+  return {
+    ...customer,
+    ...syncCustomerBalances(
+      {
+        ...customer,
+        debts: [reconciledDebt, ...customer.debts],
+      },
+      {
+        debts: [reconciledDebt, ...customer.debts],
+        debtBalance: addMoney(getCustomerDebtTotal(customer), remainingDebt),
+        creditBalance,
+      },
+    ),
+  };
 };
 
 export const applyDebtPayment = (
@@ -281,8 +332,10 @@ export const applyDebtPayment = (
 
     return {
       ...customer,
-      debts,
-      debtBalance: calculateCustomerDebt(debts),
+      ...syncCustomerBalances(customer, {
+        debts,
+        debtBalance: calculateCustomerDebt(debts),
+      }),
     };
   });
 };

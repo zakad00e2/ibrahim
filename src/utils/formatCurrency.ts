@@ -48,7 +48,16 @@ export const formatNumber = (value: number) =>
 export const formatCurrency = (value: number) =>
   `\u20AA ${toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {
     maximumFractionDigits: 2,
-  }).format(value))}`;
+  }).format(Math.abs(value)))}`;
+
+export const formatSignedBalance = (balance: number) => {
+  if (balance === 0) {
+    return formatCurrency(0);
+  }
+
+  const sign = balance > 0 ? "+" : "-";
+  return `${formatCurrency(balance)} ${sign}`;
+};
 
 export const formatPrintAmount = (value: number) =>
   toArabicDigits(new Intl.NumberFormat("ar-EG-u-nu-arab", {

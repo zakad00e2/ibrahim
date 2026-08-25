@@ -1,5 +1,5 @@
 import type { Customer, Debt, Invoice, InvoiceItem, PaymentMethod, Product } from "../types";
-import { addMoney, compareMoney, multiplyMoney, subtractMoney, sumMoney } from "./money";
+import { addMoney, compareMoney, minMoney, multiplyMoney, subtractMoney, sumMoney } from "./money";
 
 export type DebtPaymentValidationError = "missing-debt" | "invalid-amount" | "amount-exceeds-remaining";
 
@@ -40,6 +40,50 @@ export const calculateCustomerDebt = (debts: Customer["debts"]) =>
 export const getCustomerDebtTotal = (customer: Pick<Customer, "debts" | "debtBalance">) => {
   const calculated = calculateCustomerDebt(customer.debts);
   return customer.debts.length > 0 ? calculated : (customer.debtBalance ?? calculated);
+};
+
+export const getCustomerCreditBalance = (customer: Pick<Customer, "creditBalance">) =>
+  customer.creditBalance ?? 0;
+
+export const getCustomerBalance = (
+  customer: Pick<Customer, "debts" | "debtBalance" | "creditBalance" | "balance">,
+) => {
+  if (customer.balance !== undefined && Number.isFinite(customer.balance)) {
+    return customer.balance;
+  }
+
+  return subtractMoney(getCustomerCreditBalance(customer), getCustomerDebtTotal(customer));
+};
+
+export const syncCustomerBalances = (
+  customer: Pick<Customer, "debts" | "debtBalance" | "creditBalance" | "balance">,
+  overrides: Partial<Pick<Customer, "debts" | "debtBalance" | "creditBalance">> = {},
+): Pick<Customer, "debts" | "debtBalance" | "creditBalance" | "balance"> => {
+  const debts = overrides.debts ?? customer.debts;
+  const debtBalance =
+    overrides.debtBalance ??
+    (debts.length > 0 ? calculateCustomerDebt(debts) : (customer.debtBalance ?? calculateCustomerDebt(debts)));
+  const creditBalance = overrides.creditBalance ?? getCustomerCreditBalance(customer);
+
+  return {
+    debts,
+    debtBalance,
+    creditBalance,
+    balance: subtractMoney(creditBalance, debtBalance),
+  };
+};
+
+export const applyCreditToNewDebt = (
+  customer: Pick<Customer, "creditBalance">,
+  debtAmount: number,
+) => {
+  const creditUsed = minMoney(getCustomerCreditBalance(customer), debtAmount);
+
+  return {
+    creditUsed,
+    remainingDebt: subtractMoney(debtAmount, creditUsed),
+    creditBalance: subtractMoney(getCustomerCreditBalance(customer), creditUsed),
+  };
 };
 
 export const validateDebtPaymentAmount = (

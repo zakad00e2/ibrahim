@@ -51,7 +51,7 @@ const storeHarness = vi.hoisted(() => {
       isActive: true,
     },
   ];
-  const cashierProducts = [
+  const defaultCashierProducts = [
     ...products,
     {
       id: "product-21",
@@ -65,8 +65,10 @@ const storeHarness = vi.hoisted(() => {
     },
   ];
 
+  let cashierProducts = defaultCashierProducts;
   let cashierDraft = emptyDraft();
   const completeSale = vi.fn(async () => ({ ok: true, message: "ok", id: "invoice-1" }));
+  const findProductByBarcodeRemote = vi.fn(async () => null);
   const setCustomersQuery = vi.fn();
   const subscribers = new Set<() => void>();
 
@@ -77,13 +79,22 @@ const storeHarness = vi.hoisted(() => {
   return {
     product,
     products,
-    cashierProducts,
+    getCashierProducts: () => cashierProducts,
+    setCashierProducts: (nextProducts: typeof cashierProducts) => {
+      cashierProducts = nextProducts;
+      emit();
+    },
+    resetCashierProducts: () => {
+      cashierProducts = defaultCashierProducts;
+      emit();
+    },
     getCashierDraft: () => cashierDraft,
     resetCashierDraft: () => {
       cashierDraft = emptyDraft();
       emit();
     },
     completeSale,
+    findProductByBarcodeRemote,
     setCustomersQuery,
     setCashierDraft: (nextDraft: typeof cashierDraft | ((current: typeof cashierDraft) => typeof cashierDraft)) => {
       cashierDraft = typeof nextDraft === "function" ? nextDraft(cashierDraft) : nextDraft;
@@ -114,7 +125,7 @@ vi.mock("../store/AppStore", async () => {
 
       return {
         products: storeHarness.products,
-        cashierProducts: storeHarness.cashierProducts,
+        cashierProducts: storeHarness.getCashierProducts(),
         cashierProductsLoading: false,
         cashierProductsError: null,
         customers: [],
@@ -123,7 +134,7 @@ vi.mock("../store/AppStore", async () => {
         resetCashierDraft: storeHarness.resetCashierDraft,
         addCustomer: vi.fn(async () => ({ ok: true, message: "ok", id: "customer-1" })),
         completeSale: storeHarness.completeSale,
-        findProductByBarcodeRemote: vi.fn(async () => null),
+        findProductByBarcodeRemote: storeHarness.findProductByBarcodeRemote,
         setCustomersQuery: storeHarness.setCustomersQuery,
       };
     },
@@ -212,9 +223,36 @@ const setDiscount = async (container: HTMLElement, value: string) => {
   });
 };
 
+const setInputValue = async (input: HTMLInputElement, value: string) => {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+
+const scanBarcode = async (container: HTMLElement, barcode: string) => {
+  const barcodeInput = container.querySelector("#barcode");
+
+  if (!(barcodeInput instanceof HTMLInputElement)) {
+    throw new Error("Barcode input was not rendered");
+  }
+
+  await setInputValue(barcodeInput, barcode);
+  await act(async () => {
+    barcodeInput.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    }));
+  });
+};
+
 describe("CashierPage invoice draft", () => {
   beforeEach(() => {
     storeHarness.resetCashierDraft();
+    storeHarness.resetCashierProducts();
+    storeHarness.findProductByBarcodeRemote.mockReset();
+    storeHarness.findProductByBarcodeRemote.mockResolvedValue(null);
   });
 
   afterEach(async () => {
@@ -359,7 +397,86 @@ describe("CashierPage invoice draft", () => {
     expect(productScroller.className).not.toContain("grid-flow-col");
 
     const productButtons = Array.from(productScroller.querySelectorAll("button"));
-    expect(productButtons).toHaveLength(storeHarness.cashierProducts.length);
+    expect(productButtons).toHaveLength(storeHarness.getCashierProducts().length);
+  });
+
+  it("renders only the first 60 product cards until the cashier asks for more", async () => {
+    const manyProducts = Array.from({ length: 65 }, (_, index) => ({
+      ...storeHarness.product,
+      id: `bulk-product-${index + 1}`,
+      name: `Bulk Product ${index + 1}`,
+      barcode: `700${String(index + 1).padStart(9, "0")}`,
+    }));
+    storeHarness.setCashierProducts(manyProducts);
+
+    const view = await renderCashier();
+    const productScroller = view.container.querySelector('[aria-label="قائمة منتجات قابلة للتمرير العمودي"]');
+    const visibleProductButtons = Array.from(productScroller?.querySelectorAll("button") ?? []).filter((button) =>
+      button.textContent?.includes("Bulk Product"),
+    );
+
+    expect(visibleProductButtons).toHaveLength(60);
+    expect(productScroller?.textContent).not.toContain("700000000061");
+
+    const showMore = Array.from(view.container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("عرض المزيد"),
+    );
+    if (!(showMore instanceof HTMLButtonElement)) throw new Error("Show more button was not rendered");
+
+    await act(async () => showMore.click());
+
+    expect(productScroller?.textContent).toContain("700000000065");
+  });
+
+  it("searches products that are outside the initial visible batch", async () => {
+    const manyProducts = Array.from({ length: 65 }, (_, index) => ({
+      ...storeHarness.product,
+      id: `search-product-${index + 1}`,
+      name: index === 64 ? "Hidden Search Target" : `Search Product ${index + 1}`,
+      barcode: `710${String(index + 1).padStart(9, "0")}`,
+    }));
+    storeHarness.setCashierProducts(manyProducts);
+    const view = await renderCashier();
+    const searchInput = view.container.querySelector('input[placeholder*="بحث"]');
+    if (!(searchInput instanceof HTMLInputElement)) throw new Error("Search input was not rendered");
+
+    await setInputValue(searchInput, "Hidden Search Target");
+
+    expect(view.container.textContent).toContain("Hidden Search Target");
+  });
+
+  it("adds a product by barcode even when its card is outside the initial visible batch", async () => {
+    const manyProducts = Array.from({ length: 65 }, (_, index) => ({
+      ...storeHarness.product,
+      id: `scan-product-${index + 1}`,
+      name: index === 64 ? "Hidden Scan Target" : `Scan Product ${index + 1}`,
+      barcode: `720${String(index + 1).padStart(9, "0")}`,
+    }));
+    storeHarness.setCashierProducts(manyProducts);
+    const view = await renderCashier();
+
+    expect(view.container.textContent).not.toContain("Hidden Scan Target");
+    await scanBarcode(view.container, manyProducts[64].barcode);
+
+    expect(view.container.textContent).toContain("Hidden Scan Target");
+    expect(storeHarness.findProductByBarcodeRemote).not.toHaveBeenCalled();
+  });
+
+  it("shows remote barcode progress and ignores a duplicate scan while the lookup is pending", async () => {
+    let resolveLookup!: (product: null) => void;
+    storeHarness.findProductByBarcodeRemote.mockImplementation(() => new Promise((resolve) => {
+      resolveLookup = resolve;
+    }));
+    const view = await renderCashier();
+
+    await scanBarcode(view.container, "999999999999");
+    expect(view.container.textContent).toContain("جار البحث عن المنتج");
+
+    await scanBarcode(view.container, "999999999999");
+    expect(storeHarness.findProductByBarcodeRemote).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveLookup(null));
+    expect(view.container.textContent).toContain("لا يوجد منتج نشط بهذا الباركود");
   });
 
   it("shows and searches products beyond the management page", async () => {

@@ -50,6 +50,8 @@ export type Debt = {
 export type DebtSummary = {
   totalDebt: number;
   totalRemaining: number;
+  creditBalance?: number;
+  balance?: number;
   debts: Debt[];
 };
 
@@ -59,6 +61,8 @@ export type Customer = {
   phone: string;
   debts: Debt[];
   debtBalance?: number;
+  creditBalance?: number;
+  balance?: number;
 };
 
 export type InvoiceItem = {

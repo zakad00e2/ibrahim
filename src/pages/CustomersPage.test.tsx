@@ -121,6 +121,8 @@ describe("CustomersPage details modal", () => {
     mounted = null;
     vi.clearAllMocks();
     storeMocks.invoice.items = [];
+    storeMocks.debt.payments = [];
+    storeMocks.customer.debts = [storeMocks.debt];
     storeMocks.loadDebtDetail.mockResolvedValue(storeMocks.debt);
     confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
   });
@@ -135,6 +137,28 @@ describe("CustomersPage details modal", () => {
 
     confirmSpy.mockRestore();
     document.body.innerHTML = "";
+  });
+
+  it("shows the signed balance label in the customers table", async () => {
+    mounted = await renderCustomersPage();
+
+    expect(mounted.container.textContent).toContain("الرصيد");
+    expect(mounted.container.textContent).not.toContain("إجمالي الدين");
+  });
+
+  it("keeps the pay-debt action enabled when the customer has no outstanding debt", async () => {
+    storeMocks.customer.debts = [];
+    mounted = await renderCustomersPage();
+
+    const payDebtButton = findButtonByText(mounted.container, "تسديد الدين");
+
+    expect(payDebtButton.disabled).toBe(false);
+
+    await act(async () => {
+      payDebtButton.click();
+    });
+
+    expect(document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]')).toBeInstanceOf(HTMLElement);
   });
 
   it("does not show the pay debt action in the customer details footer", async () => {
@@ -199,6 +223,113 @@ describe("CustomersPage details modal", () => {
     expect(dialog.textContent).toContain("INV-2026-001");
     expect(dialog.textContent).not.toContain("الوصف");
     expect(dialog.textContent).not.toContain("فاتورة اختبار");
+  });
+
+  it("shows all customer payments in one newest-first history table", async () => {
+    storeMocks.debt.payments = [
+      {
+        id: "payment-oldest",
+        amount: 2,
+        date: "2026-08-22T08:00:00.000Z",
+        notes: "oldest payment",
+      },
+      {
+        id: "payment-newest",
+        amount: 3,
+        date: "2026-08-22T10:00:00.000Z",
+        notes: "newest payment",
+      },
+    ];
+    storeMocks.customer.debts = [
+      storeMocks.debt,
+      {
+        ...storeMocks.debt,
+        id: "debt-2",
+        invoiceId: "invoice-2",
+        invoiceNumber: "INV-2026-002",
+        payments: [
+          {
+            id: "payment-middle",
+            amount: 4,
+            date: "2026-08-22T09:00:00.000Z",
+            notes: "middle payment",
+          },
+        ],
+      },
+    ];
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "تسديد الدين").click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Customer details dialog was not rendered");
+    }
+
+    const heading = Array.from(dialog.querySelectorAll("p")).find(
+      (element) => element.textContent === "سجل دفعات العميل",
+    );
+    const history = heading?.parentElement;
+    if (!(history instanceof HTMLElement)) {
+      throw new Error("Customer payment history was not rendered");
+    }
+
+    const rows = Array.from(history.querySelectorAll("tbody tr"));
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("newest payment"),
+      expect.stringContaining("middle payment"),
+      expect.stringContaining("oldest payment"),
+    ]);
+    expect(history.textContent).toContain("INV-2026-001");
+    expect(history.textContent).toContain("INV-2026-002");
+    expect(history.textContent).not.toContain("غير متوفر");
+  });
+
+  it("shows an empty payment-history state when the customer has no payments", async () => {
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "تسديد الدين").click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Customer details dialog was not rendered");
+    }
+
+    expect(dialog.textContent).toContain("سجل دفعات العميل");
+    expect(dialog.textContent).toContain("لا توجد دفعات مسجلة لهذا العميل");
+  });
+
+  it("places customer payment history directly below the payment form", async () => {
+    mounted = await renderCustomersPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "تسديد الدين").click();
+    });
+
+    const dialog = document.querySelector('[role="dialog"][aria-label="تفاصيل العميل"]');
+    if (!(dialog instanceof HTMLElement)) {
+      throw new Error("Customer details dialog was not rendered");
+    }
+
+    const paymentButton = findButtonByText(dialog, "تسجيل التسديد");
+    const historyHeading = Array.from(dialog.querySelectorAll("p")).find(
+      (element) => element.textContent === "سجل دفعات العميل",
+    );
+    const debtsTable = Array.from(dialog.querySelectorAll("table")).find(
+      (table) => table.textContent?.includes("أصل الدين"),
+    );
+
+    if (!(historyHeading instanceof HTMLElement) || !(debtsTable instanceof HTMLElement)) {
+      throw new Error("Payment history or debts table was not rendered");
+    }
+
+    expect(paymentButton.compareDocumentPosition(historyHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(historyHeading.compareDocumentPosition(debtsTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps invoice products visible when the debt has payments", async () => {

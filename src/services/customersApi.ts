@@ -48,9 +48,50 @@ const extractCustomerDebtBalance = (dto: Record<string, unknown>, debts: Debt[])
       dto.totalDebt,
       dto.totalAmount,
       dto.debt,
-      dto.balance,
     ) ?? (debts.length > 0 ? calculateDebtBalance(debts) : undefined)
   );
+};
+
+const extractCustomerCreditBalance = (dto: Record<string, unknown>): number => {
+  const summary = isRecord(dto.summary)
+    ? dto.summary
+    : isRecord(dto.debtSummary)
+      ? dto.debtSummary
+      : undefined;
+
+  return (
+    firstApiNumber(
+      summary?.creditBalance,
+      summary?.credit,
+      summary?.prepaidBalance,
+      dto.creditBalance,
+      dto.credit,
+      dto.prepaidBalance,
+    ) ?? 0
+  );
+};
+
+const extractCustomerSignedBalance = (
+  dto: Record<string, unknown>,
+  debtBalance: number | undefined,
+  creditBalance: number,
+): number | undefined => {
+  const summary = isRecord(dto.summary)
+    ? dto.summary
+    : isRecord(dto.debtSummary)
+      ? dto.debtSummary
+      : undefined;
+  const signedBalance = firstApiNumber(summary?.balance, dto.balance);
+
+  if (signedBalance !== undefined) {
+    return signedBalance;
+  }
+
+  if (debtBalance === undefined) {
+    return creditBalance > 0 ? creditBalance : undefined;
+  }
+
+  return subtractMoney(creditBalance, debtBalance);
 };
 
 export const mapDebtPayment = (dto: unknown): DebtPayment => {
@@ -99,12 +140,16 @@ export const mapCustomer = (dto: unknown): Customer => {
   if (!isRecord(dto)) throw new Error("invalid customer dto");
   const debts = Array.isArray(dto.debts) ? dto.debts.map(mapDebt) : [];
   const debtBalance = extractCustomerDebtBalance(dto, debts);
+  const creditBalance = extractCustomerCreditBalance(dto);
+  const balance = extractCustomerSignedBalance(dto, debtBalance, creditBalance);
   return {
     id: String(dto.id ?? ""),
     name: String(dto.name ?? ""),
     phone: String(dto.phone ?? ""),
     debts,
     debtBalance,
+    creditBalance,
+    balance,
   };
 };
 

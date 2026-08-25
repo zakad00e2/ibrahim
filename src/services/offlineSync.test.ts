@@ -4,6 +4,7 @@ import type { OfflineOperation } from "./offlineDb";
 import {
   applyCustomerDebtPayment,
   applyDebtPayment,
+  applyOfflineDebtWithCredit,
   applyOfflineSaleToProducts,
   buildOfflineCustomer,
   buildOfflineInvoice,
@@ -102,6 +103,8 @@ describe("offlineSync", () => {
       name: "Ahmed",
       phone: "011",
       debtBalance: 75,
+      creditBalance: 0,
+      balance: -75,
       debts: [
         {
           id: "offline-debt-offline-customer-1779012000000",
@@ -175,7 +178,50 @@ describe("offlineSync", () => {
 
     expect(applyCustomerDebtPayment([decimalCustomer], "c1", 0.1 + 0.2)[0]).toMatchObject({
       debtBalance: 0,
+      creditBalance: 0,
+      balance: 0,
       debts: [{ paid: 0.3, remaining: 0, isPaid: true }],
+    });
+  });
+
+  it("stores excess customer payments as credit", () => {
+    expect(applyCustomerDebtPayment([customer], "c1", 70)[0]).toMatchObject({
+      debtBalance: 0,
+      creditBalance: 20,
+      balance: 20,
+      debts: [{ remaining: 0, isPaid: true }],
+    });
+  });
+
+  it("consumes cached credit when creating a new offline debt", () => {
+    const creditedCustomer: Customer = {
+      ...customer,
+      debtBalance: 0,
+      creditBalance: 40,
+      balance: 40,
+      debts: [],
+    };
+    const nextDebt = {
+      id: "d2",
+      invoiceId: "i2",
+      description: "New invoice",
+      date: "2026-08-22T00:00:00.000Z",
+      amount: 30,
+      paid: 30,
+      remaining: 0,
+      isPaid: true,
+    };
+
+    expect(applyOfflineDebtWithCredit(creditedCustomer, {
+      ...nextDebt,
+      paid: 0,
+      remaining: 30,
+      isPaid: false,
+    })).toMatchObject({
+      debtBalance: 0,
+      creditBalance: 10,
+      balance: 10,
+      debts: [expect.objectContaining({ remaining: 0, paid: 30 })],
     });
   });
 

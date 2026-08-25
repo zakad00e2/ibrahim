@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCustomerDebts, getStoreDebtSummary, payCustomerDebtAuto, payDebt } from "./debtsApi";
+import {
+  getCustomerDebts,
+  getStoreDebtSummary,
+  OVERPAYMENT_UNSUPPORTED_MESSAGE,
+  payCustomerDebtAuto,
+  payDebt,
+} from "./debtsApi";
 
 const mockFetch = (response: Response) => {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -17,6 +23,8 @@ describe("debtsApi", () => {
       summary: {
         totalAmount: "500.30",
         totalRemaining: "40.10",
+        creditBalance: "20.00",
+        balance: "-20.10",
       },
       debts: [{
         id: "d1",
@@ -33,6 +41,8 @@ describe("debtsApi", () => {
     await expect(getCustomerDebts("c1")).resolves.toEqual({
       totalDebt: 500.3,
       totalRemaining: 40.1,
+      creditBalance: 20,
+      balance: -20.1,
       debts: [expect.objectContaining({
         amount: 100.2,
         paid: 60.1,
@@ -111,7 +121,88 @@ describe("debtsApi", () => {
     });
   });
 
-  it("pays customer-level debt through individual debt payment endpoints", async () => {
+  it("uses the atomic customer payment endpoint when available", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: { totalAmount: "80.00", totalRemaining: "30.00", creditBalance: "0.00", balance: "-30.00" },
+        debts: [
+          {
+            id: "d1",
+            invoiceId: "i1",
+            amount: "30.00",
+            paid: "30.00",
+            remaining: "0.00",
+          },
+          {
+            id: "d2",
+            invoiceId: "i2",
+            amount: "50.00",
+            paid: "20.00",
+            remaining: "30.00",
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: {
+          totalAmount: "80.00",
+          totalRemaining: "0.00",
+          creditBalance: "10.00",
+          balance: "10.00",
+        },
+        debts: [
+          {
+            id: "d1",
+            invoiceId: "i1",
+            amount: "30.00",
+            paid: "30.00",
+            remaining: "0.00",
+          },
+          {
+            id: "d2",
+            invoiceId: "i2",
+            amount: "50.00",
+            paid: "50.00",
+            remaining: "0.00",
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      payCustomerDebtAuto("c1", 70, "cash drawer", { clientOperationId: "customer-payment-op-1" }),
+    ).resolves.toEqual({
+      totalDebt: 80,
+      totalRemaining: 0,
+      creditBalance: 10,
+      balance: 10,
+      debts: [
+        expect.objectContaining({ id: "d1", remaining: 0 }),
+        expect.objectContaining({ id: "d2", remaining: 0 }),
+      ],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/debts/customer/c1", expect.objectContaining({
+      method: "GET",
+    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/debts/customer/c1/pay", expect.objectContaining({
+      method: "POST",
+    }));
+
+    const [, paymentInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(String(paymentInit.body))).toEqual({
+      amount: 70,
+      notes: "cash drawer",
+      clientOperationId: "customer-payment-op-1",
+    });
+  });
+
+  it("falls back to sequential debt payments when the atomic endpoint is unavailable", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         summary: { totalAmount: "80.00", totalRemaining: "70.00" },
@@ -119,9 +210,6 @@ describe("debtsApi", () => {
           {
             id: "d1",
             invoiceId: "i1",
-            invoiceNumber: "INV-1",
-            description: "First invoice",
-            date: "2026-05-20T10:00:00.000Z",
             amount: "30.00",
             paid: "0.00",
             remaining: "30.00",
@@ -129,9 +217,6 @@ describe("debtsApi", () => {
           {
             id: "d2",
             invoiceId: "i2",
-            invoiceNumber: "INV-2",
-            description: "Second invoice",
-            date: "2026-05-21T10:00:00.000Z",
             amount: "50.00",
             paid: "0.00",
             remaining: "40.00",
@@ -139,6 +224,10 @@ describe("debtsApi", () => {
         ],
       }), {
         status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
         headers: { "Content-Type": "application/json" },
       }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -167,72 +256,47 @@ describe("debtsApi", () => {
       }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      payCustomerDebtAuto("c1", 40, "cash drawer", { clientOperationId: "customer-payment-op-1" }),
-    ).resolves.toEqual({
+    await expect(payCustomerDebtAuto("c1", 40, "cash drawer")).resolves.toEqual({
       totalDebt: 80,
       totalRemaining: 30,
+      creditBalance: 0,
+      balance: -30,
       debts: [
-        expect.objectContaining({
-          id: "d1",
-          invoiceId: "i1",
-          invoiceNumber: "INV-1",
-          description: "First invoice",
-          date: "2026-05-20T10:00:00.000Z",
-          paid: 30,
-          remaining: 0,
-        }),
-        expect.objectContaining({
-          id: "d2",
-          invoiceId: "i2",
-          invoiceNumber: "INV-2",
-          description: "Second invoice",
-          date: "2026-05-21T10:00:00.000Z",
-          paid: 10,
-          remaining: 30,
-        }),
+        expect.objectContaining({ id: "d1", remaining: 0 }),
+        expect.objectContaining({ id: "d2", remaining: 30 }),
       ],
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/debts/customer/c1", expect.objectContaining({
-      method: "GET",
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/debts/d1/pay", expect.objectContaining({
-      method: "POST",
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/debts/d2/pay", expect.objectContaining({
-      method: "POST",
-    }));
-    expect(fetchMock.mock.calls.map(([path]) => path)).not.toContain("/api/debts/customer/c1/pay");
-
-    const [, firstPaymentInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(JSON.parse(String(firstPaymentInit.body))).toEqual({
-      amount: 30,
-      notes: "cash drawer",
-    });
-    const [, secondPaymentInit] = fetchMock.mock.calls[2] as [string, RequestInit];
-    expect(JSON.parse(String(secondPaymentInit.body))).toEqual({
-      amount: 10,
-      notes: "cash drawer",
-    });
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/api/debts/customer/c1",
+      "/api/debts/customer/c1/pay",
+      "/api/debts/d1/pay",
+      "/api/debts/d2/pay",
+    ]);
   });
 
-  it("does not partially pay customer debts when the amount exceeds the summary", async () => {
-    const fetchMock = mockFetch(new Response(JSON.stringify({
-      summary: { totalAmount: "30.00", totalRemaining: "30.00" },
-      debts: [{
-        id: "d1",
-        invoiceId: "i1",
-        amount: "30.00",
-        paid: "0.00",
-        remaining: "30.00",
-      }],
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
+  it("rejects unsupported online overpayments when the atomic endpoint is unavailable", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        summary: { totalAmount: "30.00", totalRemaining: "30.00" },
+        debts: [{
+          id: "d1",
+          invoiceId: "i1",
+          amount: "30.00",
+          paid: "0.00",
+          remaining: "30.00",
+        }],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Not Found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
 
-    await expect(payCustomerDebtAuto("c1", 40)).rejects.toThrow("مبلغ التسديد أكبر من إجمالي الدين");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(payCustomerDebtAuto("c1", 40)).rejects.toThrow(OVERPAYMENT_UNSUPPORTED_MESSAGE);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

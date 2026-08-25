@@ -1,4 +1,5 @@
 import { getJson, postJson } from "./apiClient";
+import type { ApiClientError } from "./apiClient";
 import { mapDebt, mapDebtPayment } from "./customersApi";
 import type { Debt, DebtSummary } from "../types";
 import { compareMoney, minMoney, subtractMoney, sumMoney, toMoneyNumber } from "../utils/money";
@@ -18,7 +19,10 @@ const firstApiNumber = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
-const mapDebtSummaryResponse = (payload: unknown): DebtSummary => {
+export const OVERPAYMENT_UNSUPPORTED_MESSAGE =
+  "الخادم لا يدعم حالياً حفظ الرصيد الزائد. حدّث نظام الباك اند أو نفّذ التسديد دون إنترنت.";
+
+export const mapDebtSummaryResponse = (payload: unknown): DebtSummary => {
   if (!isRecord(payload)) throw new Error("invalid debt summary response");
 
   const summaryData = isRecord(payload.summary) ? payload.summary : payload;
@@ -40,10 +44,24 @@ const mapDebtSummaryResponse = (payload: unknown): DebtSummary => {
       payload.totalRemaining,
       payload.remaining,
     ) ?? (debts.length > 0 ? debtsRemaining : totalDebt);
+  const creditBalance =
+    firstApiNumber(
+      (summaryData as Record<string, unknown>).creditBalance,
+      (summaryData as Record<string, unknown>).credit,
+      payload.creditBalance,
+      payload.credit,
+    ) ?? 0;
+  const balance =
+    firstApiNumber(
+      (summaryData as Record<string, unknown>).balance,
+      payload.balance,
+    ) ?? subtractMoney(creditBalance, totalRemaining);
 
   return {
     totalDebt,
     totalRemaining,
+    creditBalance,
+    balance,
     debts,
   };
 };
@@ -120,22 +138,35 @@ const mergeDebtFallback = (debt: Debt, fallback?: Debt): Debt => {
   };
 };
 
-export const payCustomerDebtAuto = async (
+const isEndpointUnavailable = (error: unknown): boolean => {
+  const statusCode = (error as ApiClientError).statusCode;
+  return statusCode === 404 || statusCode === 405;
+};
+
+export const payCustomerDebtAtomic = async (
   customerId: string,
   amount: number,
   notes?: string,
   options: DebtPaymentOptions = {},
 ): Promise<DebtSummary> => {
-  const summary = await getCustomerDebts(customerId);
+  const body: Record<string, unknown> = { amount };
+  if (notes?.trim()) body.notes = notes.trim();
+  if (options.clientOperationId) body.clientOperationId = options.clientOperationId;
 
-  if (!Number.isFinite(amount) || compareMoney(amount, 0) <= 0) {
-    throw new Error("أدخل مبلغ تسديد صحيح");
-  }
+  const payload = await postJson(
+    `/api/debts/customer/${encodeURIComponent(customerId)}/pay`,
+    body,
+  );
+  return mapDebtSummaryResponse(payload);
+};
 
-  if (compareMoney(amount, summary.totalRemaining) === 1) {
-    throw new Error("مبلغ التسديد أكبر من إجمالي الدين");
-  }
-
+const payCustomerDebtSequential = async (
+  customerId: string,
+  amount: number,
+  notes: string | undefined,
+  options: DebtPaymentOptions,
+  summary: DebtSummary,
+): Promise<DebtSummary> => {
   if (!summary.debts.some((debt) => compareMoney(debt.remaining, 0) === 1)) {
     throw new Error("تعذر تحميل تفاصيل ديون العميل.");
   }
@@ -158,8 +189,38 @@ export const payCustomerDebtAuto = async (
   return {
     totalDebt: sumMoney(debts.map((debt) => debt.amount)),
     totalRemaining: sumMoney(debts.map((debt) => debt.remaining)),
+    creditBalance: summary.creditBalance ?? 0,
+    balance: subtractMoney(summary.creditBalance ?? 0, sumMoney(debts.map((debt) => debt.remaining))),
     debts,
   };
+};
+
+export const payCustomerDebtAuto = async (
+  customerId: string,
+  amount: number,
+  notes?: string,
+  options: DebtPaymentOptions = {},
+): Promise<DebtSummary> => {
+  if (!Number.isFinite(amount) || compareMoney(amount, 0) <= 0) {
+    throw new Error("أدخل مبلغ تسديد صحيح");
+  }
+
+  const summary = await getCustomerDebts(customerId);
+  const isOverpayment = compareMoney(amount, summary.totalRemaining) === 1;
+
+  try {
+    return await payCustomerDebtAtomic(customerId, amount, notes, options);
+  } catch (error) {
+    if (!isEndpointUnavailable(error)) {
+      throw error;
+    }
+
+    if (isOverpayment) {
+      throw new Error(OVERPAYMENT_UNSUPPORTED_MESSAGE);
+    }
+
+    return payCustomerDebtSequential(customerId, amount, notes, options, summary);
+  }
 };
 
 export const getDebtById = async (id: string): Promise<Debt> => {

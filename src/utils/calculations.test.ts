@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCreditToNewDebt,
   calculateCustomerDebt,
   calculateInvoiceTotal,
   calculateInvoiceItemTotal,
   calculateItemsTotal,
+  getCustomerBalance,
+  syncCustomerBalances,
   validateInvoiceDiscount,
   validateDebtPaymentAmount,
 } from "./calculations";
@@ -98,5 +101,62 @@ describe("money-safe calculations", () => {
       },
     ])).toBe(0.3);
     expect(validateDebtPaymentAmount({ remaining: 0.3 }, 0.1 + 0.2)).toBeNull();
+  });
+});
+
+describe("customer balance helpers", () => {
+  it("calculates signed balance from credit and debt", () => {
+    expect(getCustomerBalance({
+      debts: [],
+      debtBalance: 80,
+      creditBalance: 0,
+    })).toBe(-80);
+
+    expect(getCustomerBalance({
+      debts: [],
+      debtBalance: 0,
+      creditBalance: 40,
+    })).toBe(40);
+
+    expect(getCustomerBalance({
+      debts: [],
+      debtBalance: 0,
+      creditBalance: 0,
+      balance: 0,
+    })).toBe(0);
+  });
+
+  it("stores excess customer payments as credit", () => {
+    const customer = {
+      debts: [{
+        id: "d1",
+        invoiceId: "i1",
+        description: "Debt",
+        date: "2026-08-22T00:00:00.000Z",
+        amount: 50,
+        paid: 0,
+        remaining: 50,
+      }],
+      debtBalance: 50,
+      creditBalance: 0,
+    };
+
+    expect(syncCustomerBalances(customer, {
+      debts: [{ ...customer.debts[0], paid: 50, remaining: 0, isPaid: true }],
+      debtBalance: 0,
+      creditBalance: 20,
+    })).toMatchObject({
+      debtBalance: 0,
+      creditBalance: 20,
+      balance: 20,
+    });
+  });
+
+  it("consumes credit when creating a new debt", () => {
+    expect(applyCreditToNewDebt({ creditBalance: 40 }, 30)).toEqual({
+      creditUsed: 30,
+      remainingDebt: 0,
+      creditBalance: 10,
+    });
   });
 });

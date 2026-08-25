@@ -364,6 +364,127 @@ describe("AppStore product actions", () => {
     expect(offlineDbMocks.upsertCachedProducts).toHaveBeenCalledWith("store:store-1", [existingProduct, laterProduct]);
   });
 
+  it("shows cached cashier products immediately while the online refresh is pending", async () => {
+    const cachedProduct = {
+      ...existingProduct,
+      id: "cached-product",
+      name: "Cached Rice",
+      barcode: "cached-111",
+    };
+    let resolveCashierRefresh!: (result: {
+      items: Product[];
+      total: number;
+      page: number;
+      limit: number;
+    }) => void;
+
+    offlineDbMocks.listCachedProducts.mockImplementation(async (_storeKey: string, query: { limit?: number }) => (
+      query.limit === Number.MAX_SAFE_INTEGER
+        ? { items: [cachedProduct], total: 1, page: 1, limit: Number.MAX_SAFE_INTEGER }
+        : { items: [], total: 0, page: 1, limit: query.limit ?? 20 }
+    ));
+    productApiMocks.listProducts.mockImplementation(async ({ page, limit }: { page?: number; limit?: number }) => {
+      if (limit === 100) {
+        return new Promise((resolve) => {
+          resolveCashierRefresh = resolve;
+        });
+      }
+
+      return { items: [existingProduct], total: 1, page: page ?? 1, limit: limit ?? 20 };
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([cachedProduct]);
+      expect(mounted.getStore().cashierProductsLoading).toBe(true);
+    });
+
+    await act(async () => {
+      resolveCashierRefresh({ items: [existingProduct], total: 1, page: 1, limit: 100 });
+    });
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct]);
+      expect(mounted.getStore().cashierProductsLoading).toBe(false);
+    });
+  });
+
+  it("continues the online cashier refresh when the browser cache cannot be read", async () => {
+    offlineDbMocks.listCachedProducts.mockRejectedValue(new Error("IndexedDB unavailable"));
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct]);
+      expect(mounted.getStore().cashierProductsLoading).toBe(false);
+      expect(mounted.getStore().cashierProductsError).toBeNull();
+    });
+  });
+
+  it("keeps a remotely found barcode product in cashier state for the next scan", async () => {
+    const remoteProduct = {
+      ...existingProduct,
+      id: "remote-product",
+      name: "Remote Tea",
+      barcode: "remote-333",
+    };
+    productApiMocks.getProductByBarcode.mockResolvedValue(remoteProduct);
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([existingProduct]);
+    });
+
+    await act(async () => {
+      await mounted.getStore().findProductByBarcodeRemote(remoteProduct.barcode);
+    });
+
+    expect(mounted.getStore().cashierProducts).toEqual([remoteProduct, existingProduct]);
+  });
+
+  it("does not lose a remotely found product when an older cashier refresh finishes", async () => {
+    const remoteProduct = {
+      ...existingProduct,
+      id: "race-remote-product",
+      name: "Race Remote Tea",
+      barcode: "race-remote-333",
+    };
+    let resolveCashierRefresh!: (result: {
+      items: Product[];
+      total: number;
+      page: number;
+      limit: number;
+    }) => void;
+    productApiMocks.getProductByBarcode.mockResolvedValue(remoteProduct);
+    productApiMocks.listProducts.mockImplementation(async ({ page, limit }: { page?: number; limit?: number }) => {
+      if (limit === 100) {
+        return new Promise((resolve) => {
+          resolveCashierRefresh = resolve;
+        });
+      }
+
+      return { items: [existingProduct], total: 1, page: page ?? 1, limit: limit ?? 20 };
+    });
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+
+    await act(async () => {
+      await mounted.getStore().findProductByBarcodeRemote(remoteProduct.barcode);
+    });
+    expect(mounted.getStore().cashierProducts).toEqual([remoteProduct]);
+
+    await act(async () => {
+      resolveCashierRefresh({ items: [existingProduct], total: 1, page: 1, limit: 100 });
+    });
+
+    await waitFor(() => {
+      expect(mounted.getStore().cashierProducts).toEqual([remoteProduct, existingProduct]);
+    });
+  });
+
   it("completes a sale for a product loaded after the management page", async () => {
     const laterProduct = { ...existingProduct, id: "product-101", name: "Later product", barcode: "101" };
     const laterItem = {
@@ -571,6 +692,125 @@ describe("AppStore product actions", () => {
     );
   });
 
+  it("keeps customer-detail payment history when debt summaries omit payments", async () => {
+    const payment = {
+      id: "payment-1",
+      amount: 20,
+      date: "2026-08-25T10:00:00.000Z",
+      notes: "customer payment",
+    };
+    const customerWithPayment: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debtBalance: 30,
+      debts: [{
+        id: "debt-1",
+        invoiceId: "invoice-1",
+        description: "Invoice",
+        date: "2026-08-25T09:00:00.000Z",
+        amount: 50,
+        paid: 20,
+        remaining: 30,
+        payments: [payment],
+      }],
+    };
+    customerApiMocks.listCustomers.mockResolvedValue({
+      items: [{ ...customerWithPayment, debts: [] }],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    customerApiMocks.getCustomerById.mockResolvedValue(customerWithPayment);
+    debtApiMocks.getCustomerDebts.mockResolvedValue({
+      totalDebt: 50,
+      totalRemaining: 30,
+      debts: [{
+        ...customerWithPayment.debts[0],
+        payments: undefined,
+      }],
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await mounted.getStore().loadCustomerDetail("customer-1");
+    });
+
+    expect(mounted.getStore().customers[0]?.debts[0]?.payments).toEqual([payment]);
+  });
+
+  it("refreshes customer payment history after recording a customer-level payment", async () => {
+    const customerBeforePayment: Customer = {
+      id: "customer-1",
+      name: "Ibrahim",
+      phone: "010",
+      debtBalance: 50,
+      debts: [{
+        id: "debt-1",
+        invoiceId: "invoice-1",
+        description: "Invoice",
+        date: "2026-08-25T09:00:00.000Z",
+        amount: 50,
+        paid: 0,
+        remaining: 50,
+        payments: [],
+      }],
+    };
+    const payment = {
+      id: "payment-1",
+      amount: 20,
+      date: "2026-08-25T10:00:00.000Z",
+      notes: "customer payment",
+    };
+    customerApiMocks.listCustomers.mockResolvedValue({
+      items: [customerBeforePayment],
+      total: 1,
+      page: 1,
+      limit: 20,
+    });
+    customerApiMocks.getCustomerById.mockResolvedValue({
+      ...customerBeforePayment,
+      debtBalance: 30,
+      debts: [{
+        ...customerBeforePayment.debts[0],
+        paid: 20,
+        remaining: 30,
+        payments: [payment],
+      }],
+    });
+    offlineSyncMocks.applyCustomerDebtPayment.mockReturnValue([{
+      ...customerBeforePayment,
+      debtBalance: 30,
+    }]);
+    debtApiMocks.payCustomerDebtAuto.mockResolvedValue({
+      totalDebt: 50,
+      totalRemaining: 30,
+      debts: [{
+        ...customerBeforePayment.debts[0],
+        paid: 20,
+        remaining: 30,
+        payments: undefined,
+      }],
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([customerBeforePayment]);
+    });
+
+    await act(async () => {
+      await mounted.getStore().payCustomerDebt("customer-1", 20, "customer payment");
+    });
+
+    expect(mounted.getStore().customers[0]?.debts[0]?.payments).toEqual([payment]);
+  });
+
   it("reuses the same client payment operation id after an ambiguous individual debt payment failure", async () => {
     const customerWithDebt: Customer = {
       id: "customer-1",
@@ -723,6 +963,8 @@ describe("AppStore product actions", () => {
       phone: "011",
       debts: [],
       debtBalance: 0,
+      creditBalance: 0,
+      balance: 0,
     };
     offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
     offlineDbMocks.listCachedCustomers.mockResolvedValue({
@@ -825,7 +1067,13 @@ describe("AppStore product actions", () => {
 
     await waitFor(() => {
       expect(mounted.getStore().customers).toEqual([
-        { ...cachedCustomer, debts: [serverDebt], debtBalance: 100 },
+        {
+          ...cachedCustomer,
+          debts: [serverDebt],
+          debtBalance: 100,
+          creditBalance: 0,
+          balance: -100,
+        },
       ]);
     });
     expect(customerApiMocks.listCustomers).not.toHaveBeenCalled();
@@ -834,6 +1082,7 @@ describe("AppStore product actions", () => {
       "customer-1",
       [serverDebt],
       100,
+      0,
     );
   });
 
@@ -882,7 +1131,13 @@ describe("AppStore product actions", () => {
 
     await waitFor(() => {
       expect(mounted.getStore().customers).toEqual([
-        { ...cachedCustomer, debts: [unsyncedDebt, serverDebt], debtBalance: 150 },
+        {
+          ...cachedCustomer,
+          debts: [unsyncedDebt, serverDebt],
+          debtBalance: 150,
+          creditBalance: 0,
+          balance: -150,
+        },
       ]);
     });
   });

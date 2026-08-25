@@ -1,6 +1,11 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
 const STORAGE_KEY = "ibrahim-market-auth-session";
+const DEFAULT_RETRY_AFTER_SECONDS = 60;
+
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+let getCooldownUntil = 0;
+let getRetryQueue: Promise<void> = Promise.resolve();
 
 type ApiErrorPayload = {
   message?: string | string[];
@@ -209,7 +214,34 @@ const getRetryAfterSeconds = (response: Response): number | undefined => {
 };
 
 const buildThrottledMessage = (retryAfterSeconds?: number): string =>
-  `تجاوزت عدد المحاولات. حاول بعد ${retryAfterSeconds ?? 60} ثانية.`;
+  `تجاوزت عدد المحاولات. حاول بعد ${retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS} ثانية.`;
+
+const waitForGetCooldown = async (): Promise<void> => {
+  const delayMs = getCooldownUntil - Date.now();
+
+  if (delayMs > 0) {
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, delayMs));
+  }
+};
+
+const updateGetCooldown = (response: Response): void => {
+  const retryAfterSeconds = getRetryAfterSeconds(response) ?? DEFAULT_RETRY_AFTER_SECONDS;
+  getCooldownUntil = Math.max(getCooldownUntil, Date.now() + retryAfterSeconds * 1000);
+};
+
+const enqueueGetRetry = <T>(operation: () => Promise<T>): Promise<T> => {
+  const scheduled = getRetryQueue.then(async () => {
+    await waitForGetCooldown();
+    return operation();
+  });
+
+  getRetryQueue = scheduled.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return scheduled;
+};
 
 export const buildApiError = (
   response: Response,
@@ -259,13 +291,56 @@ const handleResponse = async (response: Response, fallback: string): Promise<unk
   return payload;
 };
 
-export const getJson = async (path: string): Promise<unknown> => {
+const performGet = async (
+  path: string,
+  retryOnThrottle: boolean,
+  queuedForCooldown = false,
+): Promise<unknown> => {
+  const cooldownDelayMs = getCooldownUntil - Date.now();
+
+  if (cooldownDelayMs > 0 && !queuedForCooldown) {
+    return enqueueGetRetry(() => performGet(path, retryOnThrottle, true));
+  }
+
+  if (cooldownDelayMs > 0) {
+    await waitForGetCooldown();
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "GET",
     headers: buildHeaders(),
   });
 
+  if (response.status === 429) {
+    updateGetCooldown(response);
+
+    if (retryOnThrottle) {
+      await readJson(response);
+      return enqueueGetRetry(() => performGet(path, false, true));
+    }
+  }
+
   return handleResponse(response, "تعذر جلب البيانات من الخادم.");
+};
+
+export const getJson = (path: string): Promise<unknown> => {
+  const existingRequest = inFlightGetRequests.get(path);
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = performGet(path, true);
+  inFlightGetRequests.set(path, request);
+
+  const clearRequest = () => {
+    if (inFlightGetRequests.get(path) === request) {
+      inFlightGetRequests.delete(path);
+    }
+  };
+
+  request.then(clearRequest, clearRequest);
+  return request;
 };
 
 export const postJson = async <TBody extends object>(path: string, body: TBody): Promise<unknown> => {

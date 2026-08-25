@@ -5,8 +5,8 @@ import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { useAppStore } from "../store/AppStore";
 import type { Customer, Debt, Invoice } from "../types";
-import { getCustomerDebtTotal } from "../utils/calculations";
-import { formatCurrency, formatDate, formatNumber, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
+import { getCustomerBalance, getCustomerDebtTotal } from "../utils/calculations";
+import { formatCurrency, formatDate, formatNumber, formatSignedBalance, normalizeDigits, toArabicDigits } from "../utils/formatCurrency";
 
 type CustomerForm = {
   name: string;
@@ -90,6 +90,18 @@ export function CustomersPage() {
     [customers, detailsCustomerId],
   );
 
+  const getBalanceTone = (balance: number) => {
+    if (balance < 0) return "text-red-700";
+    if (balance > 0) return "text-emerald-700";
+    return "text-zinc-600";
+  };
+
+  const getBalancePanelClass = (balance: number) => {
+    if (balance < 0) return "rounded-lg bg-red-50 p-4";
+    if (balance > 0) return "rounded-lg bg-emerald-50 p-4";
+    return "rounded-lg bg-zinc-50 p-4";
+  };
+
   const totalDebt = useMemo(
     () => customers.reduce((sum, c) => sum + getCustomerDebtTotal(c), 0),
     [customers],
@@ -112,6 +124,27 @@ export function CustomersPage() {
     },
     [invoices],
   );
+
+  const selectedCustomerPayments = useMemo(() => {
+    if (!selectedCustomer) return [];
+
+    const paymentTimestamp = (date: string) => {
+      const timestamp = Date.parse(date);
+      return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+    };
+
+    return selectedCustomer.debts
+      .flatMap((debt) =>
+        (debt.payments ?? []).map((payment) => ({
+          payment,
+          invoiceNumber: getDebtInvoiceNumber(debt),
+        })),
+      )
+      .sort(
+        (left, right) =>
+          paymentTimestamp(right.payment.date) - paymentTimestamp(left.payment.date),
+      );
+  }, [getDebtInvoiceNumber, selectedCustomer]);
 
   const openAddModal = () => {
     setEditingCustomer(null);
@@ -339,7 +372,7 @@ export function CustomersPage() {
               <tr>
                 <th className="px-4 py-3">الاسم</th>
                 <th className="px-4 py-3">رقم الهاتف</th>
-                <th className="px-4 py-3">إجمالي الدين</th>
+                <th className="px-4 py-3">الرصيد</th>
                 <th className="px-4 py-3">إجراءات</th>
               </tr>
             </thead>
@@ -358,7 +391,7 @@ export function CustomersPage() {
                 </tr>
               ) : (
                 customers.map((customer) => {
-                  const debt = getCustomerDebtTotal(customer);
+                  const balance = getCustomerBalance(customer);
                   return (
                     <tr key={customer.id}>
                       <td className="font-features-normal px-4 py-3 font-medium text-zinc-950">
@@ -368,13 +401,12 @@ export function CustomersPage() {
                         {customer.phone || "غير مسجل"}
                       </td>
                       <td
-                        className={
-                          debt > 0
-                            ? "px-4 py-3 text-lg font-semibold text-red-700 sm:text-xl"
-                            : "px-4 py-3 text-lg font-semibold text-emerald-700 sm:text-xl"
-                        }
+                        className={[
+                          "px-4 py-3 text-lg font-semibold sm:text-xl",
+                          getBalanceTone(balance),
+                        ].join(" ")}
                       >
-                        <AnimatedDigits value={formatCurrency(debt)} />
+                        <AnimatedDigits value={formatSignedBalance(balance)} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -382,7 +414,6 @@ export function CustomersPage() {
                             variant="secondary"
                             size="sm"
                             icon={<WalletCards className="h-4 w-4" />}
-                            disabled={debt <= 0}
                             onClick={() => void openDebtPayment(customer)}
                           >
                             تسديد الدين
@@ -537,10 +568,12 @@ export function CustomersPage() {
                 <p className="text-xs font-medium text-zinc-500">رقم الهاتف</p>
                 <p className="mt-1 font-medium text-zinc-950">{selectedCustomer.phone || "غير مسجل"}</p>
               </div>
-              <div className="rounded-lg bg-red-50 p-4">
-                <p className="text-xs font-medium text-red-500">إجمالي الدين</p>
-                <p className="mt-1 font-medium text-red-700">
-                  <AnimatedDigits value={formatCurrency(getCustomerDebtTotal(selectedCustomer))} />
+              <div className={getBalancePanelClass(getCustomerBalance(selectedCustomer))}>
+                <p className={`text-xs font-medium ${getBalanceTone(getCustomerBalance(selectedCustomer))}`}>
+                  الرصيد
+                </p>
+                <p className={`mt-1 font-medium ${getBalanceTone(getCustomerBalance(selectedCustomer))}`}>
+                  <AnimatedDigits value={formatSignedBalance(getCustomerBalance(selectedCustomer))} />
                 </p>
               </div>
             </div>
@@ -563,6 +596,46 @@ export function CustomersPage() {
                 </Button>
               </div>
             ) : null}
+
+            <div>
+              <p className="mb-2 text-sm font-medium text-zinc-700">سجل دفعات العميل</p>
+              {selectedCustomerPayments.length === 0 ? (
+                <div className="rounded-lg bg-zinc-50 px-4 py-6 text-center text-sm font-normal text-zinc-500">
+                  لا توجد دفعات مسجلة لهذا العميل
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-zinc-200">
+                  <table className="w-full min-w-[620px] text-right text-sm">
+                    <thead className="bg-zinc-50 text-xs font-medium text-zinc-500">
+                      <tr>
+                        <th className="px-4 py-3">تاريخ الدفعة</th>
+                        <th className="px-4 py-3">المبلغ</th>
+                        <th className="px-4 py-3">رقم الفاتورة</th>
+                        <th className="px-4 py-3">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100">
+                      {selectedCustomerPayments.map(({ payment, invoiceNumber }) => (
+                        <tr key={payment.id}>
+                          <td className="px-4 py-3 font-normal text-zinc-600">
+                            {formatDate(payment.date)}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-emerald-700">
+                            <AnimatedDigits value={formatCurrency(payment.amount)} />
+                          </td>
+                          <td className="px-4 py-3 font-medium text-zinc-950">
+                            {invoiceNumber}
+                          </td>
+                          <td className="px-4 py-3 font-normal text-zinc-500">
+                            {payment.notes || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             {message ? (
               <div

@@ -5,13 +5,13 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent,
   type SetStateAction,
   type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, Camera, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Minus, Plus, Printer, ReceiptText, Search, Trash2, UserPlus } from "lucide-react";
 import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
+import { CashierBarcodeInput } from "../components/CashierBarcodeInput";
 import { AnimatedDigits } from "../components/AnimatedDigits";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -24,7 +24,6 @@ import {
   calculateInvoiceItemTotal,
   calculateInvoiceTotal,
   calculateItemsTotal,
-  findProductByBarcode,
   getPaymentMethodLabel,
   getStockStatus,
   validateInvoiceDiscount,
@@ -62,6 +61,8 @@ const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
   { value: "partial", label: "دفع جزئي" },
 ];
 
+const PRODUCT_CARD_BATCH_SIZE = 60;
+
 const resolveSetState = <T,>(value: SetStateAction<T>, current: T): T =>
   typeof value === "function" ? (value as (currentValue: T) => T)(current) : value;
 
@@ -80,8 +81,8 @@ export function CashierPage() {
     resetCashierDraft,
   } = useAppStore();
   const { items, paymentMethod, selectedCustomerId, customerSearch, paidAmount, discount } = cashierDraft;
-  const [barcode, setBarcode] = useState("");
   const [search, setSearch] = useState("");
+  const [visibleProductLimit, setVisibleProductLimit] = useState(PRODUCT_CARD_BATCH_SIZE);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerForm>({ name: "", phone: "", initialDebt: "" });
   const [customerFormError, setCustomerFormError] = useState("");
@@ -92,6 +93,7 @@ export function CashierPage() {
   const [printReceipt, setPrintReceipt] = useState<ReceiptSnapshot | null>(null);
   const [printRequestId, setPrintRequestId] = useState(0);
   const [storeName, setStoreName] = useState(DEFAULT_STORE_NAME);
+  const [barcodeLookupPending, setBarcodeLookupPending] = useState(false);
 
   const setItems = useCallback((value: SetStateAction<InvoiceItem[]>) => {
     setCashierDraft((current) => ({
@@ -137,6 +139,7 @@ export function CashierPage() {
 
   const customerSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const pendingBarcodeLookupsRef = useRef(new Set<string>());
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -202,6 +205,20 @@ export function CashierPage() {
     );
   }, [cashierProducts, search]);
 
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, visibleProductLimit),
+    [filteredProducts, visibleProductLimit],
+  );
+
+  const productByBarcode = useMemo(
+    () => new Map(cashierProducts.map((product) => [product.barcode.trim(), product])),
+    [cashierProducts],
+  );
+
+  useEffect(() => {
+    setVisibleProductLimit(PRODUCT_CARD_BATCH_SIZE);
+  }, [search]);
+
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId),
     [customers, selectedCustomerId],
@@ -231,7 +248,7 @@ export function CashierPage() {
     paymentMethod === "cash" ? total : paymentMethod === "debt" ? 0 : Number(normalizeDigits(paidAmount || "0"));
   const remaining = maxMoney(subtractMoney(total, Number.isFinite(effectivePaid) ? effectivePaid : 0), 0);
 
-  const addProductToInvoice = (product: Product, saleUnit: SaleUnit = "unit") => {
+  const addProductToInvoice = useCallback((product: Product, saleUnit: SaleUnit = "unit") => {
     const pieces = saleUnit === "carton" ? product.piecesPerCarton ?? 0 : 1;
     if (saleUnit === "carton" && (!pieces || product.cartonSalePrice === undefined || product.cartonPurchasePrice === undefined)) return;
     if (product.stock === 0) {
@@ -279,7 +296,7 @@ export function CashierPage() {
     });
 
     setNotice({ type: "success", text: `تمت إضافة ${toArabicDigits(product.name)} إلى الفاتورة` });
-  };
+  }, [items, setItems]);
 
   const handleCompleteSale = useCallback(async () => {
     setSaleSubmitting(true);
@@ -323,48 +340,39 @@ export function CashierPage() {
 
       if (!normalized) return;
 
-      const localProduct = findProductByBarcode(cashierProducts, normalized);
+      const localProduct = productByBarcode.get(normalized);
 
       if (localProduct) {
         addProductToInvoice(localProduct);
         return;
       }
 
-      void (async () => {
-        const remoteProduct = await findProductByBarcodeRemote(normalized);
+      if (pendingBarcodeLookupsRef.current.has(normalized)) return;
 
-        if (!remoteProduct) {
-          setNotice({ type: "error", text: "لا يوجد منتج نشط بهذا الباركود" });
-        } else {
-          addProductToInvoice(remoteProduct);
+      pendingBarcodeLookupsRef.current.add(normalized);
+      setBarcodeLookupPending(true);
+
+      void (async () => {
+        try {
+          const remoteProduct = await findProductByBarcodeRemote(normalized);
+
+          if (!remoteProduct) {
+            setNotice({ type: "error", text: "لا يوجد منتج نشط بهذا الباركود" });
+          } else {
+            addProductToInvoice(remoteProduct);
+          }
+        } finally {
+          pendingBarcodeLookupsRef.current.delete(normalized);
+          setBarcodeLookupPending(pendingBarcodeLookupsRef.current.size > 0);
         }
       })();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cashierProducts, findProductByBarcodeRemote],
+    [addProductToInvoice, findProductByBarcodeRemote, productByBarcode],
   );
 
-  const handleBarcodeEnter = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-
-      event.preventDefault();
-      const normalized = normalizeDigits(barcode).trim();
-
-      if (!normalized) {
-        if (items.length > 0 && !saleSubmitting) {
-          void handleCompleteSale();
-        }
-        return;
-      }
-
-      addByBarcode(normalized);
-      setBarcode("");
-    },
-    [barcode, addByBarcode, handleCompleteSale, items.length, saleSubmitting],
-  );
+  const handleEmptyBarcodeSubmit = useCallback(() => {
+    if (items.length > 0 && !saleSubmitting) void handleCompleteSale();
+  }, [handleCompleteSale, items.length, saleSubmitting]);
 
   const updateItemQuantity = (productId: string, delta: number) => {
     const product = cashierProducts.find((item) => item.id === productId);
@@ -556,31 +564,16 @@ export function CashierPage() {
           <label className="mb-2 block text-sm font-medium text-zinc-900" htmlFor="barcode">
             امسح الباركود هنا
           </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                ref={barcodeInputRef}
-                id="barcode"
-                value={barcode}
-                onChange={(event) => setBarcode(normalizeDigits(event.target.value))}
-                onKeyDown={handleBarcodeEnter}
-                className="h-12 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-3 text-base font-bold outline-none transition focus:border-zinc-500 focus:bg-white sm:h-14 sm:px-4 sm:text-xl"
-              />
-              {barcode ? null : (
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base font-normal leading-none text-zinc-400 sm:right-4 sm:text-xl">
-                  اكتب أو امسح الباركود
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setScannerOpen(true)}
-              aria-label="مسح بالكاميرا"
-              className="sm:hidden flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-zinc-50 text-zinc-600 transition hover:bg-zinc-100 active:bg-zinc-200"
-            >
-              <Camera className="h-5 w-5" />
-            </button>
-          </div>
+          <CashierBarcodeInput
+            ref={barcodeInputRef}
+            onSubmit={addByBarcode}
+            onEmptySubmit={handleEmptyBarcodeSubmit}
+            onOpenScanner={() => setScannerOpen(true)}
+          />
+
+          {barcodeLookupPending ? (
+            <p className="mt-3 text-sm font-medium text-sky-700">جار البحث عن المنتج...</p>
+          ) : null}
 
           {notice ? (
             <div
@@ -620,12 +613,12 @@ export function CashierPage() {
             aria-label="قائمة منتجات قابلة للتمرير العمودي"
             className="grid max-h-[34rem] gap-3 overflow-y-auto overscroll-y-contain p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-2 2xl:grid-cols-3"
           >
-            {cashierProductsLoading ? <p className="p-4 text-sm text-zinc-500">جار تحميل المنتجات...</p> : null}
+            {cashierProductsLoading && cashierProducts.length === 0 ? <p className="p-4 text-sm text-zinc-500">جار تحميل المنتجات...</p> : null}
             {cashierProductsError ? <p className="p-4 text-sm text-red-700">{cashierProductsError}</p> : null}
             {!cashierProductsLoading && !cashierProductsError && filteredProducts.length === 0 ? (
               <p className="p-4 text-sm text-zinc-500">لا توجد منتجات مطابقة للبحث.</p>
             ) : null}
-            {!cashierProductsLoading && !cashierProductsError ? filteredProducts.map((product) => {
+            {cashierProducts.length > 0 && !cashierProductsError ? visibleProducts.map((product) => {
               const status = getStockStatus(product.stock);
 
               return (
@@ -640,8 +633,8 @@ export function CashierPage() {
                   <div className="mt-auto pt-3">
                     <p className="mb-2 break-all text-xs font-semibold text-zinc-500">{product.barcode}</p>
                     <div className="flex flex-wrap items-end justify-between gap-2 text-sm font-bold">
-                      <span className="text-brand-700"><AnimatedDigits value={formatCurrency(product.price)} /></span>
-                      <span className="font-normal text-zinc-500">المخزون: <AnimatedDigits value={formatNumber(product.stock)} /></span>
+                      <span className="text-brand-700">{formatCurrency(product.price)}</span>
+                      <span className="font-normal text-zinc-500">المخزون: {formatNumber(product.stock)}</span>
                     </div>
                   </div>
                   </button>
@@ -653,6 +646,15 @@ export function CashierPage() {
                 </div>
               );
             }) : null}
+            {visibleProducts.length < filteredProducts.length ? (
+              <button
+                type="button"
+                onClick={() => setVisibleProductLimit((current) => current + PRODUCT_CARD_BATCH_SIZE)}
+                className="col-span-full h-11 rounded-lg border border-zinc-300 bg-zinc-50 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100"
+              >
+                عرض المزيد ({formatNumber(filteredProducts.length - visibleProducts.length)})
+              </button>
+            ) : null}
           </div>
         </div>
 
