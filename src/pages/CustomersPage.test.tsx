@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomersPage } from "./CustomersPage";
-import type { Debt, Invoice } from "../types";
+import type { Customer, Debt, Invoice } from "../types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -21,11 +21,13 @@ const storeMocks = vi.hoisted(() => {
     payments: [],
   };
 
-  const customer = {
+  const customer: Customer = {
     id: "customer-1",
     name: "رامي رامي",
     phone: "0597986160",
     debts: [debt],
+    customerPayments: [],
+    customerPaymentsTotal: 0,
   };
 
   const invoice: Invoice = {
@@ -123,6 +125,8 @@ describe("CustomersPage details modal", () => {
     storeMocks.invoice.items = [];
     storeMocks.debt.payments = [];
     storeMocks.customer.debts = [storeMocks.debt];
+    storeMocks.customer.customerPayments = [];
+    storeMocks.customer.customerPaymentsTotal = 0;
     storeMocks.loadDebtDetail.mockResolvedValue(storeMocks.debt);
     confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
   });
@@ -225,38 +229,40 @@ describe("CustomersPage details modal", () => {
     expect(dialog.textContent).not.toContain("فاتورة اختبار");
   });
 
-  it("shows all customer payments in one newest-first history table", async () => {
+  it("shows only customer-account payments with their cash allocation and cancellation state", async () => {
     storeMocks.debt.payments = [
       {
-        id: "payment-oldest",
-        amount: 2,
+        id: "debt-payment-only",
+        amount: 999,
         date: "2026-08-22T08:00:00.000Z",
-        notes: "oldest payment",
-      },
-      {
-        id: "payment-newest",
-        amount: 3,
-        date: "2026-08-22T10:00:00.000Z",
-        notes: "newest payment",
+        notes: "ignored debt payment",
       },
     ];
-    storeMocks.customer.debts = [
-      storeMocks.debt,
+    storeMocks.customer.customerPayments = [
       {
-        ...storeMocks.debt,
-        id: "debt-2",
-        invoiceId: "invoice-2",
-        invoiceNumber: "INV-2026-002",
-        payments: [
-          {
-            id: "payment-middle",
-            amount: 4,
-            date: "2026-08-22T09:00:00.000Z",
-            notes: "middle payment",
-          },
-        ],
+        id: "payment-reversed",
+        customerId: "customer-1",
+        amount: 150,
+        appliedToDebt: 100,
+        addedToCredit: 50,
+        notes: "دفعة ملغاة",
+        paidAt: "2026-08-25T10:31:44.000Z",
+        reversedAt: "2026-08-26T08:00:00.000Z",
+        clientOperationId: "operation-1",
+      },
+      {
+        id: "payment-active",
+        customerId: "customer-1",
+        amount: 75,
+        appliedToDebt: 75,
+        addedToCredit: 0,
+        notes: "دفعة قائمة",
+        paidAt: "2026-08-24T10:31:44.000Z",
+        reversedAt: null,
+        clientOperationId: null,
       },
     ];
+    storeMocks.customer.customerPaymentsTotal = 137;
     mounted = await renderCustomersPage();
 
     await act(async () => {
@@ -269,7 +275,7 @@ describe("CustomersPage details modal", () => {
     }
 
     const heading = Array.from(dialog.querySelectorAll("p")).find(
-      (element) => element.textContent === "سجل دفعات العميل",
+      (element) => element.textContent === "دفعات على حساب الزبون",
     );
     const history = heading?.parentElement;
     if (!(history instanceof HTMLElement)) {
@@ -277,15 +283,17 @@ describe("CustomersPage details modal", () => {
     }
 
     const rows = Array.from(history.querySelectorAll("tbody tr"));
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("newest payment"),
-      expect.stringContaining("middle payment"),
-      expect.stringContaining("oldest payment"),
+      expect.stringContaining("دفعة ملغاة"),
+      expect.stringContaining("دفعة قائمة"),
     ]);
-    expect(history.textContent).toContain("INV-2026-001");
-    expect(history.textContent).toContain("INV-2026-002");
-    expect(history.textContent).not.toContain("غير متوفر");
+    expect(history.textContent).toContain("المستلم");
+    expect(history.textContent).toContain("على الدين");
+    expect(history.textContent).toContain("رصيد مضاف");
+    expect(history.textContent).toContain("تم إلغاؤها");
+    expect(history.textContent).toContain("عرض آخر ٥٠ من أصل ١٣٧");
+    expect(history.textContent).not.toContain("ignored debt payment");
   });
 
   it("shows an empty payment-history state when the customer has no payments", async () => {
@@ -300,8 +308,8 @@ describe("CustomersPage details modal", () => {
       throw new Error("Customer details dialog was not rendered");
     }
 
-    expect(dialog.textContent).toContain("سجل دفعات العميل");
-    expect(dialog.textContent).toContain("لا توجد دفعات مسجلة لهذا العميل");
+    expect(dialog.textContent).toContain("دفعات على حساب الزبون");
+    expect(dialog.textContent).toContain("لا توجد دفعات على حساب هذا الزبون");
   });
 
   it("places customer payment history directly below the payment form", async () => {
@@ -318,7 +326,7 @@ describe("CustomersPage details modal", () => {
 
     const paymentButton = findButtonByText(dialog, "تسجيل التسديد");
     const historyHeading = Array.from(dialog.querySelectorAll("p")).find(
-      (element) => element.textContent === "سجل دفعات العميل",
+      (element) => element.textContent === "دفعات على حساب الزبون",
     );
     const debtsTable = Array.from(dialog.querySelectorAll("table")).find(
       (table) => table.textContent?.includes("أصل الدين"),

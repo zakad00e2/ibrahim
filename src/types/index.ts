@@ -33,6 +33,18 @@ export type DebtPayment = {
   notes?: string;
 };
 
+export type CustomerPayment = {
+  id: string;
+  customerId: string;
+  amount: number;
+  appliedToDebt: number;
+  addedToCredit: number;
+  notes?: string;
+  paidAt: string;
+  reversedAt: string | null;
+  clientOperationId: string | null;
+};
+
 export type Debt = {
   id: string;
   invoiceId: string;
@@ -53,6 +65,7 @@ export type DebtSummary = {
   creditBalance?: number;
   balance?: number;
   debts: Debt[];
+  payment?: CustomerPayment;
 };
 
 export type Customer = {
@@ -60,6 +73,8 @@ export type Customer = {
   name: string;
   phone: string;
   debts: Debt[];
+  customerPayments?: CustomerPayment[];
+  customerPaymentsTotal?: number;
   debtBalance?: number;
   creditBalance?: number;
   balance?: number;

@@ -1,6 +1,6 @@
 import { getJson, postJson } from "./apiClient";
 import type { ApiClientError } from "./apiClient";
-import { mapDebt, mapDebtPayment } from "./customersApi";
+import { mapCustomerPayment, mapDebt, mapDebtPayment } from "./customersApi";
 import type { Debt, DebtSummary } from "../types";
 import { compareMoney, minMoney, subtractMoney, sumMoney, toMoneyNumber } from "../utils/money";
 
@@ -63,6 +63,7 @@ export const mapDebtSummaryResponse = (payload: unknown): DebtSummary => {
     creditBalance,
     balance,
     debts,
+    payment: isRecord(payload.payment) ? mapCustomerPayment(payload.payment) : undefined,
   };
 };
 

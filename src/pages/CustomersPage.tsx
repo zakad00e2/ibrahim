@@ -125,26 +125,8 @@ export function CustomersPage() {
     [invoices],
   );
 
-  const selectedCustomerPayments = useMemo(() => {
-    if (!selectedCustomer) return [];
-
-    const paymentTimestamp = (date: string) => {
-      const timestamp = Date.parse(date);
-      return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-    };
-
-    return selectedCustomer.debts
-      .flatMap((debt) =>
-        (debt.payments ?? []).map((payment) => ({
-          payment,
-          invoiceNumber: getDebtInvoiceNumber(debt),
-        })),
-      )
-      .sort(
-        (left, right) =>
-          paymentTimestamp(right.payment.date) - paymentTimestamp(left.payment.date),
-      );
-  }, [getDebtInvoiceNumber, selectedCustomer]);
+  const selectedCustomerPayments = selectedCustomer?.customerPayments ?? [];
+  const selectedCustomerPaymentsTotal = selectedCustomer?.customerPaymentsTotal ?? selectedCustomerPayments.length;
 
   const openAddModal = () => {
     setEditingCustomer(null);
@@ -598,36 +580,59 @@ export function CustomersPage() {
             ) : null}
 
             <div>
-              <p className="mb-2 text-sm font-medium text-zinc-700">سجل دفعات العميل</p>
+              <p className="text-sm font-medium text-zinc-700">دفعات على حساب الزبون</p>
+              <p className="mb-2 text-xs font-normal text-zinc-500">
+                يشمل هذا السجل القبض عبر تسديد ديون الزبون فقط، ولا يمثل جميع دفعات الزبون.
+              </p>
+              {selectedCustomerPaymentsTotal > selectedCustomerPayments.length ? (
+                <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  عرض آخر ٥٠ من أصل {formatNumber(selectedCustomerPaymentsTotal)}
+                </p>
+              ) : null}
               {selectedCustomerPayments.length === 0 ? (
                 <div className="rounded-lg bg-zinc-50 px-4 py-6 text-center text-sm font-normal text-zinc-500">
-                  لا توجد دفعات مسجلة لهذا العميل
+                  لا توجد دفعات على حساب هذا الزبون
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-zinc-200">
-                  <table className="w-full min-w-[620px] text-right text-sm">
+                  <table className="w-full min-w-[760px] text-right text-sm">
                     <thead className="bg-zinc-50 text-xs font-medium text-zinc-500">
                       <tr>
-                        <th className="px-4 py-3">تاريخ الدفعة</th>
-                        <th className="px-4 py-3">المبلغ</th>
-                        <th className="px-4 py-3">رقم الفاتورة</th>
+                        <th className="px-4 py-3">تاريخ القبض</th>
+                        <th className="px-4 py-3">المستلم</th>
+                        <th className="px-4 py-3">على الدين</th>
+                        <th className="px-4 py-3">رصيد مضاف</th>
                         <th className="px-4 py-3">ملاحظات</th>
+                        <th className="px-4 py-3">الحالة</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100">
-                      {selectedCustomerPayments.map(({ payment, invoiceNumber }) => (
-                        <tr key={payment.id}>
-                          <td className="px-4 py-3 font-normal text-zinc-600">
-                            {formatDate(payment.date)}
+                      {selectedCustomerPayments.map((payment) => (
+                        <tr key={payment.id} className={payment.reversedAt ? "bg-amber-50/70" : undefined}>
+                          <td className={`px-4 py-3 font-normal ${payment.reversedAt ? "text-amber-800 line-through" : "text-zinc-600"}`}>
+                            {formatDate(payment.paidAt)}
                           </td>
-                          <td className="px-4 py-3 font-medium text-emerald-700">
+                          <td className={`px-4 py-3 font-medium ${payment.reversedAt ? "text-amber-800 line-through" : "text-emerald-700"}`}>
                             <AnimatedDigits value={formatCurrency(payment.amount)} />
                           </td>
-                          <td className="px-4 py-3 font-medium text-zinc-950">
-                            {invoiceNumber}
+                          <td className={`px-4 py-3 font-medium ${payment.reversedAt ? "text-amber-800 line-through" : "text-zinc-950"}`}>
+                            <AnimatedDigits value={formatCurrency(payment.appliedToDebt)} />
                           </td>
-                          <td className="px-4 py-3 font-normal text-zinc-500">
+                          <td className={`px-4 py-3 font-medium ${payment.reversedAt ? "text-amber-800 line-through" : "text-brand-700"}`}>
+                            <AnimatedDigits value={formatCurrency(payment.addedToCredit)} />
+                          </td>
+                          <td className={`px-4 py-3 font-normal ${payment.reversedAt ? "text-amber-800 line-through" : "text-zinc-500"}`}>
                             {payment.notes || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-medium">
+                            {payment.reversedAt ? (
+                              <span className="text-amber-800">
+                                تم إلغاؤها
+                                <span className="mt-1 block font-normal">{formatDate(payment.reversedAt)}</span>
+                              </span>
+                            ) : (
+                              <span className="text-emerald-700">قائمة</span>
+                            )}
                           </td>
                         </tr>
                       ))}

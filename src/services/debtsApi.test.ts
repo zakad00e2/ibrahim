@@ -3,6 +3,7 @@ import {
   getCustomerDebts,
   getStoreDebtSummary,
   OVERPAYMENT_UNSUPPORTED_MESSAGE,
+  payCustomerDebtAtomic,
   payCustomerDebtAuto,
   payDebt,
 } from "./debtsApi";
@@ -199,6 +200,38 @@ describe("debtsApi", () => {
       amount: 70,
       notes: "cash drawer",
       clientOperationId: "customer-payment-op-1",
+    });
+  });
+
+  it("preserves the customer-account payment returned by an atomic payment response", async () => {
+    mockFetch(new Response(JSON.stringify({
+      summary: { totalAmount: "100.00", totalRemaining: "0.00", creditBalance: "50.00", balance: "50.00" },
+      debts: [],
+      payment: {
+        id: "customer-payment-1",
+        customerId: "c1",
+        amount: "150.00",
+        appliedToDebt: "100.00",
+        addedToCredit: "50.00",
+        notes: "دفعة كاملة",
+        paidAt: "2026-08-25T10:31:44.000Z",
+        reversedAt: null,
+        clientOperationId: "operation-1",
+      },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+
+    await expect(payCustomerDebtAtomic("c1", 150)).resolves.toMatchObject({
+      payment: {
+        id: "customer-payment-1",
+        amount: 150,
+        appliedToDebt: 100,
+        addedToCredit: 50,
+        paidAt: "2026-08-25T10:31:44.000Z",
+        reversedAt: null,
+      },
     });
   });
 

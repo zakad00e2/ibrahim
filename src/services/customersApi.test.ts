@@ -74,6 +74,44 @@ describe("customersApi", () => {
     });
   });
 
+  it("maps customer-account payment amounts and reversal metadata from the customer detail response", async () => {
+    mockFetch(
+      new Response(JSON.stringify({
+        id: "c1",
+        name: "Ibrahim",
+        phone: "010",
+        debts: [],
+        customerPayments: [{
+          id: "customer-payment-1",
+          customerId: "c1",
+          amount: "150.00",
+          appliedToDebt: "100.00",
+          addedToCredit: "50.00",
+          notes: "دفعة كاملة",
+          paidAt: "2026-08-25T10:31:44.000Z",
+          reversedAt: "2026-08-26T08:00:00.000Z",
+          clientOperationId: "payment-operation-1",
+        }],
+        customerPaymentsTotal: 137,
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(getCustomerById("c1")).resolves.toMatchObject({
+      customerPayments: [{
+        id: "customer-payment-1",
+        amount: 150,
+        appliedToDebt: 100,
+        addedToCredit: 50,
+        paidAt: "2026-08-25T10:31:44.000Z",
+        reversedAt: "2026-08-26T08:00:00.000Z",
+      }],
+      customerPaymentsTotal: 137,
+    });
+  });
+
   it("includes clientCustomerId when provided for offline queue customer creation", async () => {
     const fetchMock = mockFetch(
       new Response(JSON.stringify({

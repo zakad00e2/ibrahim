@@ -1,5 +1,5 @@
 import { deleteJson, getJson, patchJson, postJson } from "./apiClient";
-import type { Customer, CustomerInput, Debt, DebtPayment } from "../types";
+import type { Customer, CustomerInput, CustomerPayment, Debt, DebtPayment } from "../types";
 import { subtractMoney, sumMoney, toMoneyNumber } from "../utils/money";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -104,6 +104,31 @@ export const mapDebtPayment = (dto: unknown): DebtPayment => {
   };
 };
 
+export const mapCustomerPayment = (dto: unknown): CustomerPayment => {
+  if (!isRecord(dto)) throw new Error("invalid customer payment dto");
+  return {
+    id: String(dto.id ?? ""),
+    customerId: String(dto.customerId ?? dto.customer_id ?? ""),
+    amount: parseApiNumber(dto.amount),
+    appliedToDebt: parseApiNumber(dto.appliedToDebt ?? dto.applied_to_debt),
+    addedToCredit: parseApiNumber(dto.addedToCredit ?? dto.added_to_credit),
+    notes: typeof dto.notes === "string" ? dto.notes : undefined,
+    paidAt: String(dto.paidAt ?? dto.paid_at ?? ""),
+    reversedAt:
+      typeof dto.reversedAt === "string"
+        ? dto.reversedAt
+        : typeof dto.reversed_at === "string"
+          ? dto.reversed_at
+          : null,
+    clientOperationId:
+      typeof dto.clientOperationId === "string"
+        ? dto.clientOperationId
+        : typeof dto.client_operation_id === "string"
+          ? dto.client_operation_id
+          : null,
+  };
+};
+
 export const mapDebt = (dto: unknown): Debt => {
   if (!isRecord(dto)) throw new Error("invalid debt dto");
   const invoice = isRecord(dto.invoice) ? dto.invoice : undefined;
@@ -139,6 +164,9 @@ export const mapDebt = (dto: unknown): Debt => {
 export const mapCustomer = (dto: unknown): Customer => {
   if (!isRecord(dto)) throw new Error("invalid customer dto");
   const debts = Array.isArray(dto.debts) ? dto.debts.map(mapDebt) : [];
+  const customerPayments = Array.isArray(dto.customerPayments)
+    ? dto.customerPayments.map(mapCustomerPayment)
+    : [];
   const debtBalance = extractCustomerDebtBalance(dto, debts);
   const creditBalance = extractCustomerCreditBalance(dto);
   const balance = extractCustomerSignedBalance(dto, debtBalance, creditBalance);
@@ -147,6 +175,8 @@ export const mapCustomer = (dto: unknown): Customer => {
     name: String(dto.name ?? ""),
     phone: String(dto.phone ?? ""),
     debts,
+    customerPayments,
+    customerPaymentsTotal: firstApiNumber(dto.customerPaymentsTotal) ?? customerPayments.length,
     debtBalance,
     creditBalance,
     balance,
