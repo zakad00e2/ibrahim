@@ -25,7 +25,7 @@ export function InvoicesPage() {
     invoicesTotal,
     setInvoicesQuery,
     loadInvoiceDetail,
-    products,
+    cashierProducts,
     updateInvoice,
     deleteInvoice,
   } = useAppStore();
@@ -93,12 +93,12 @@ export function InvoicesPage() {
     editItems.find((item) => item.productId === productId)?.quantity ?? 0;
 
   const getEditableQuantityLimit = (productId: string) => {
-    const product = products.find((item) => item.id === productId);
+    const product = cashierProducts.find((item) => item.id === productId);
     return (product?.stock ?? 0) + getOriginalQuantity(productId);
   };
 
   const setEditItemQuantity = (productId: string, value: string | number) => {
-    const product = products.find((item) => item.id === productId);
+    const product = cashierProducts.find((item) => item.id === productId);
     const originalItem = editingInvoice?.items.find((item) => item.productId === productId);
 
     if (!product && !originalItem) return;
@@ -160,12 +160,12 @@ export function InvoicesPage() {
   const filteredEditProducts = useMemo(() => {
     const term = normalizeDigits(editSearch).trim().toLowerCase();
     const visibleProducts = term
-      ? products.filter(
+      ? cashierProducts.filter(
           (product) => product.name.toLowerCase().includes(term) || product.barcode.includes(term),
         )
-      : products;
+      : cashierProducts;
     return visibleProducts.slice(0, 8);
-  }, [editSearch, products]);
+  }, [cashierProducts, editSearch]);
 
   const editTotal = useMemo(() => calculateItemsTotal(editItems), [editItems]);
   const editPaid = editingInvoice

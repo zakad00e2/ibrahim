@@ -33,9 +33,21 @@ const storeMocks = vi.hoisted(() => {
     isActive: true,
   };
 
+  const cashierOnlyProduct: Product = {
+    id: "product-101",
+    name: "\u0642\u0647\u0648\u0629 \u0645\u062a\u0623\u062e\u0631\u0629",
+    barcode: "9876543210",
+    price: 30,
+    wholesalePrice: 22,
+    stock: 3,
+    minStock: 1,
+    isActive: true,
+  };
+
   return {
     invoice,
     product,
+    cashierOnlyProduct,
     deleteInvoice: vi.fn(async () => ({ ok: true, message: "ok" })),
     loadInvoiceDetail: vi.fn(async () => invoice),
     setInvoicesQuery: vi.fn(),
@@ -53,6 +65,7 @@ vi.mock("../store/AppStore", () => ({
     setInvoicesQuery: storeMocks.setInvoicesQuery,
     loadInvoiceDetail: storeMocks.loadInvoiceDetail,
     products: [storeMocks.product],
+    cashierProducts: [storeMocks.product, storeMocks.cashierOnlyProduct],
     updateInvoice: storeMocks.updateInvoice,
     deleteInvoice: storeMocks.deleteInvoice,
   }),
@@ -138,5 +151,26 @@ describe("InvoicesPage delete confirmation", () => {
     });
 
     expect(storeMocks.deleteInvoice).toHaveBeenCalledWith("invoice-1");
+  });
+
+  it("finds a full-cashier product when replacing an invoice item", async () => {
+    mounted = await renderInvoicesPage();
+
+    await act(async () => {
+      findButtonByText(mounted!.container, "\u062a\u0639\u062f\u064a\u0644").click();
+      await Promise.resolve();
+    });
+
+    const search = document.querySelector('input[placeholder="\u0625\u0636\u0627\u0641\u0629 \u0645\u0646\u062a\u062c \u0644\u0644\u0627\u0633\u062a\u0628\u062f\u0627\u0644"]');
+    if (!(search instanceof HTMLInputElement)) {
+      throw new Error("Invoice replacement search was not rendered");
+    }
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(search, "\u0642\u0647\u0648\u0629");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("\u0642\u0647\u0648\u0629 \u0645\u062a\u0623\u062e\u0631\u0629");
   });
 });
