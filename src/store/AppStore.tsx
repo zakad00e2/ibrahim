@@ -380,6 +380,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [customersError, setCustomersError] = useState<string | null>(null);
   const [customersQuery, setCustomersQueryState] = useState<CustomersQuery>(DEFAULT_CUSTOMERS_QUERY);
   const [customersTotal, setCustomersTotal] = useState(0);
+  const customersFetchRevisionRef = useRef(0);
 
   // ── Invoices ─────────────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -671,9 +672,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [storeCacheKey]);
 
   const fetchCustomers = useCallback(async (query: CustomersQuery) => {
+    const requestRevision = ++customersFetchRevisionRef.current;
+    const isLatestRequest = () => requestRevision === customersFetchRevisionRef.current;
+
     if (!storeCacheKey) {
-      setCustomers([]);
-      setCustomersTotal(0);
+      if (isLatestRequest()) {
+        setCustomers([]);
+        setCustomersTotal(0);
+      }
       return;
     }
 
@@ -685,7 +691,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
         const cached = await listCachedCustomers(storeCacheKey, query);
-        setCustomers(isOnline ? await refreshCachedCustomerDebts(cached.items) : cached.items);
+        const items = isOnline ? await refreshCachedCustomerDebts(cached.items) : cached.items;
+        if (!isLatestRequest()) return;
+        setCustomers(items);
         setCustomersTotal(cached.total);
         return;
       }
@@ -701,13 +709,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         ? firstResult
         : await listCustomers({ ...params, page: backendPage });
       const items = await hydrateCustomerDebtSummaries(result.items);
+      if (!isLatestRequest()) return;
       await upsertCachedCustomers(storeCacheKey, items);
+      if (!isLatestRequest()) return;
       setCustomers([...items].reverse());
       setCustomersTotal(firstResult.total);
     } catch (err) {
+      if (!isLatestRequest()) return;
       if (isNetworkFailure(err)) {
         setIsOffline(true);
         const cached = await listCachedCustomers(storeCacheKey, query);
+        if (!isLatestRequest()) return;
         setCustomers(cached.items);
         setCustomersTotal(cached.total);
         setCustomersError(null);
@@ -716,7 +728,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setCustomersError(msg);
       }
     } finally {
-      setCustomersLoading(false);
+      if (isLatestRequest()) setCustomersLoading(false);
     }
   }, [hydrateCustomerDebtSummaries, queueOwnerKey, refreshCachedCustomerDebts, storeCacheKey]);
 

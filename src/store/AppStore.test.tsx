@@ -956,6 +956,73 @@ describe("AppStore product actions", () => {
     expect(customerApiMocks.listCustomers).toHaveBeenCalledWith({ page: 2, limit: 20 });
   });
 
+  it("keeps the newest customer search results when an older request finishes last", async () => {
+    const olderCustomer: Customer = {
+      id: "customer-older-search",
+      name: "Older search result",
+      phone: "011",
+      debts: [],
+      debtBalance: 0,
+    };
+    const newerCustomer: Customer = {
+      id: "customer-newer-search",
+      name: "Newer search result",
+      phone: "012",
+      debts: [],
+      debtBalance: 0,
+    };
+    let resolveOlderSearch!: (result: { items: Customer[]; total: number; page: number; limit: number }) => void;
+    let resolveNewerSearch!: (result: { items: Customer[]; total: number; page: number; limit: number }) => void;
+
+    customerApiMocks.listCustomers.mockImplementation(({ search }: { search?: string }) => {
+      if (search === "older") {
+        return new Promise((resolve) => {
+          resolveOlderSearch = resolve;
+        });
+      }
+      if (search === "newer") {
+        return new Promise((resolve) => {
+          resolveNewerSearch = resolve;
+        });
+      }
+      return Promise.resolve({ items: [], total: 0, page: 1, limit: 20 });
+    });
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+    await waitFor(() => {
+      expect(mounted.getStore().customersLoading).toBe(false);
+    });
+
+    await act(async () => {
+      mounted.getStore().setCustomersQuery({ search: "older", page: 1, limit: 50 });
+    });
+    await waitFor(() => {
+      expect(resolveOlderSearch).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      mounted.getStore().setCustomersQuery({ search: "newer", page: 1, limit: 50 });
+    });
+    await waitFor(() => {
+      expect(resolveNewerSearch).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      resolveNewerSearch({ items: [newerCustomer], total: 1, page: 1, limit: 50 });
+    });
+    await waitFor(() => {
+      expect(mounted.getStore().customers).toEqual([newerCustomer]);
+    });
+
+    await act(async () => {
+      resolveOlderSearch({ items: [olderCustomer], total: 1, page: 1, limit: 50 });
+    });
+    await flushAsyncWork();
+
+    expect(mounted.getStore().customers).toEqual([newerCustomer]);
+  });
+
   it("uses the requested cached customer page without inferring server pagination", async () => {
     const newestCustomer: Customer = {
       id: "cached-newest",
