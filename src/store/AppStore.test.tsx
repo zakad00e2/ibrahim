@@ -1023,6 +1023,99 @@ describe("AppStore product actions", () => {
     expect(mounted.getStore().customers).toEqual([newerCustomer]);
   });
 
+  it("publishes customer search results before debt hydration finishes", async () => {
+    const searchCustomer: Customer = {
+      id: "customer-search-result",
+      name: "Ibrahim",
+      phone: "010",
+      debts: [],
+    };
+    let resolveDebtSummary!: (summary: {
+      debts: [];
+      totalDebt: number;
+      totalPaid: number;
+      totalRemaining: number;
+    }) => void;
+
+    customerApiMocks.listCustomers.mockImplementation(({ search }: { search?: string }) =>
+      Promise.resolve(
+        search
+          ? { items: [searchCustomer], total: 1, page: 1, limit: 50 }
+          : { items: [], total: 0, page: 1, limit: 20 },
+      ));
+    debtApiMocks.getCustomerDebts.mockImplementation(() =>
+      new Promise((resolve) => {
+        resolveDebtSummary = resolve;
+      }));
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+    await waitFor(() => {
+      expect(mounted.getStore().customersLoading).toBe(false);
+    });
+
+    await act(async () => {
+      mounted.getStore().setCustomersQuery({ search: "Ibrahim", page: 1, limit: 50 });
+    });
+    await waitFor(() => {
+      expect(resolveDebtSummary).toBeTypeOf("function");
+    });
+
+    expect(mounted.getStore().customers).toEqual([searchCustomer]);
+
+    await act(async () => {
+      resolveDebtSummary({ debts: [], totalDebt: 0, totalPaid: 0, totalRemaining: 0 });
+    });
+  });
+
+  it("publishes cached customer search results before online debt refresh finishes", async () => {
+    const cachedSearchCustomer: Customer = {
+      id: "cached-customer-search-result",
+      name: "Ahmed",
+      phone: "011",
+      debts: [],
+      debtBalance: 0,
+    };
+    let resolveDebtRefresh!: (summary: {
+      debts: [];
+      totalDebt: number;
+      totalPaid: number;
+      totalRemaining: number;
+    }) => void;
+
+    offlineSyncMocks.shouldReadFromOfflineCache.mockReturnValue(true);
+    offlineDbMocks.listCachedCustomers.mockImplementation(
+      (_storeKey: string, query: { search?: string }) => Promise.resolve(
+        query.search
+          ? { items: [cachedSearchCustomer], total: 1, page: 1, limit: 50 }
+          : { items: [], total: 0, page: 1, limit: 20 },
+      ),
+    );
+    debtApiMocks.getCustomerDebts.mockImplementation(() =>
+      new Promise((resolve) => {
+        resolveDebtRefresh = resolve;
+      }));
+
+    const mounted = await renderStore();
+    mountedRoots.push(mounted);
+    await waitFor(() => {
+      expect(mounted.getStore().customersLoading).toBe(false);
+    });
+
+    await act(async () => {
+      mounted.getStore().setCustomersQuery({ search: "Ahmed", page: 1, limit: 50 });
+    });
+    await waitFor(() => {
+      expect(resolveDebtRefresh).toBeTypeOf("function");
+    });
+
+    expect(mounted.getStore().customers).toEqual([cachedSearchCustomer]);
+
+    await act(async () => {
+      resolveDebtRefresh({ debts: [], totalDebt: 0, totalPaid: 0, totalRemaining: 0 });
+    });
+  });
+
   it("uses the requested cached customer page without inferring server pagination", async () => {
     const newestCustomer: Customer = {
       id: "cached-newest",

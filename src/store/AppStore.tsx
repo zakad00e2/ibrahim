@@ -691,6 +691,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (shouldReadFromOfflineCache(isOnline, hasPendingOfflineWrites)) {
         if (!isOnline) setIsOffline(true);
         const cached = await listCachedCustomers(storeCacheKey, query);
+        if (query.search.trim()) {
+          if (!isLatestRequest()) return;
+          setCustomers(cached.items);
+          setCustomersTotal(cached.total);
+        }
         const items = isOnline ? await refreshCachedCustomerDebts(cached.items) : cached.items;
         if (!isLatestRequest()) return;
         setCustomers(items);
@@ -708,6 +713,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const result: CustomersListResult = backendPage === 1
         ? firstResult
         : await listCustomers({ ...params, page: backendPage });
+      if (query.search.trim()) {
+        if (!isLatestRequest()) return;
+        setCustomers([...result.items].reverse());
+        setCustomersTotal(firstResult.total);
+      }
       const items = await hydrateCustomerDebtSummaries(result.items);
       if (!isLatestRequest()) return;
       await upsertCachedCustomers(storeCacheKey, items);
